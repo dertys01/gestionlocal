@@ -57,6 +57,8 @@ interface OrderLine {
   status: 'new' | 'sent' | 'served';
   /** Convive (partage par article). null = non affecté. */
   split_part: number | null;
+  /** Ligne offerte (tournée) : exclue de l'addition. */
+  is_offered: boolean;
   name?: string;
 }
 
@@ -157,6 +159,8 @@ export function FloorModule({
   const [actionTable, setActionTable] = useState<'transfer' | 'merge' | null>(null);
   // Couverts (nombre de clients) de la commande ouverte, saisi au service.
   const [covers, setCovers] = useState('');
+  // Remise sur l'addition (patron/manager uniquement).
+  const [remise, setRemise] = useState('');
   // Résumé du jour : couverts, additions, CA → ticket moyen par couvert.
   const [stats, setStats] = useState<{ covers: number; additions: number; revenue: number } | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
@@ -290,7 +294,7 @@ export function FloorModule({
     setLinesLoading(true);
     const { data, error: err } = await db
       .from('restaurant_order_items')
-      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, split_part, product:products(name)')
+      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, split_part, is_offered, product:products(name)')
       .eq('order_id', id)
       .order('created_at');
     // Une réponse d'une table déjà quittée est ignorée : sinon ses lignes
@@ -496,6 +500,20 @@ export function FloorModule({
     setBusy(true);
     setError('');
     const { error: err } = await db.from('restaurant_order_items').update({ split_part: part }).eq('id', line.id);
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    if (orderId) await loadLines(orderId);
+  };
+
+  /** Offre une ligne (tournée) ou annule l'offert. Patron/manager seulement. */
+  const toggleOffert = async (line: OrderLine) => {
+    if (!canManageProducts) {
+      setError('Seul le patron ou un manager peut offrir une ligne.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    const { error: err } = await db.from('restaurant_order_items').update({ is_offered: !line.is_offered }).eq('id', line.id);
     setBusy(false);
     if (err) { setError(err.message); return; }
     if (orderId) await loadLines(orderId);
@@ -733,6 +751,15 @@ export function FloorModule({
     return [...m.entries()].sort((a, b) => a[0] - b[0]);
   }, [lines]);
 
+  // Offerts et remise : l'addition réellement due.
+  const totalOffert = lines.reduce(
+    (n, l) => n + (l.is_offered ? Number(l.quantity) * (Number(l.unit_price) + Number(l.extra_price ?? 0)) : 0),
+    0,
+  );
+  const totalNet = totalLignes - totalOffert;
+  const remiseMontant = Math.max(0, lireMontant(remise) ?? 0);
+  const aPayer = Math.max(0, totalNet - remiseMontant);
+
   // ── Clôture ────────────────────────────────────────────────
   // Fractionner ne multiplie PAS les ventes : trois convives à 12 000 F font
   // une vente de 36 000 F, répartie en 3 parts pour l'affichage. La part de
@@ -798,8 +825,8 @@ export function FloorModule({
         return;
       }
       const somme = paiementsValides.reduce((n, x) => n + x.amount, 0);
-      if (Math.abs(somme - totalLignes) > 0.01) {
-        setError(`La somme des paiements (${formatCFA(somme)}) doit égaler l'addition (${formatCFA(totalLignes)}).`);
+      if (Math.abs(somme - aPayer) > 0.01) {
+        setError(`La somme des paiements (${formatCFA(somme)}) doit égaler l'addition (${formatCFA(aPayer)}).`);
         return;
       }
     }
@@ -813,6 +840,7 @@ export function FloorModule({
       p_tip: tip,
       p_client_phone: payment === 'credit' ? creditPhone.trim() : null,
       p_amount_paid: avance,
+      p_discount: remiseMontant,
       ...(multiPaiement ? { p_payments: paiementsValides } : {}),
     });
     setClosing(false);
@@ -848,6 +876,7 @@ export function FloorModule({
     setCreditAdvance('');
     setMultiPaiement(false);
     setPaiements([]);
+    setRemise('');
     await loadTables();
     void loadStats();
   };
@@ -1313,13 +1342,26 @@ export function FloorModule({
                       </div>
                       {l.note && <div className="text-xs text-amber-700 truncate">{l.note}</div>}
                     </div>
-                    <span className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                    <span className={`text-sm font-medium whitespace-nowrap ${l.is_offered ? 'text-emerald-700' : 'text-slate-700'}`}>
                       {/* Le supplément entre dans le montant de la ligne : c'est
                           ce que close_table_order() additionne. */}
-                      {formatCFA(
-                        Number(l.quantity) * (Number(l.unit_price) + Number(l.extra_price ?? 0))
-                      )}
+                      {l.is_offered
+                        ? 'Offert'
+                        : formatCFA(
+                            Number(l.quantity) * (Number(l.unit_price) + Number(l.extra_price ?? 0))
+                          )}
                     </span>
+                    {canManageProducts && (
+                      <button
+                        type="button"
+                        onClick={() => void toggleOffert(l)}
+                        disabled={busy}
+                        aria-pressed={l.is_offered}
+                        className={`shrink-0 text-xs underline ${l.is_offered ? 'text-emerald-700' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {l.is_offered ? 'Annuler offert' : 'Offert'}
+                      </button>
+                    )}
                     {/* Partage par article : à quel convive appartient la ligne. */}
                     <select
                       aria-label={`Part de ${l.name}`}
@@ -1471,9 +1513,28 @@ export function FloorModule({
                     className="w-24"
                   />
                   <span className="text-xs text-slate-500">
-                    {tip > 0 ? `total ${formatCFA(totalLignes + tip)}` : 'laisser en espèces'}
+                    {tip > 0 ? `total ${formatCFA(aPayer + tip)}` : 'laisser en espèces'}
                   </span>
                 </div>
+
+                {/* Remise sur l'addition : patron/manager seulement. */}
+                {canManageProducts && (
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="remise" className="text-xs font-medium text-slate-600 shrink-0">
+                      Remise
+                    </label>
+                    <Input
+                      id="remise"
+                      value={remise}
+                      onChange={(e) => setRemise(e.target.value)}
+                      placeholder="0"
+                      inputMode="decimal"
+                      aria-label="Remise (F)"
+                      className="w-24"
+                    />
+                    <span className="text-xs text-slate-500">à payer {formatCFA(aPayer)}</span>
+                  </div>
+                )}
 
                 {/* Paiement multiple : plusieurs moyens sur une même addition. */}
                 <button
@@ -1485,7 +1546,7 @@ export function FloorModule({
                       setPayment('cash');
                       if (paiements.length === 0) {
                         setPaiements([
-                          { method: 'cash', amount: String(totalLignes) },
+                          { method: 'cash', amount: String(aPayer) },
                           { method: 'momo', amount: '' },
                         ]);
                       }
@@ -1537,7 +1598,7 @@ export function FloorModule({
                         + Ajouter un moyen
                       </button>
                       <span className="text-xs text-slate-500">
-                        {formatCFA(paiements.reduce((n, x) => n + (lireMontant(x.amount) ?? 0), 0))} / {formatCFA(totalLignes)}
+                        {formatCFA(paiements.reduce((n, x) => n + (lireMontant(x.amount) ?? 0), 0))} / {formatCFA(aPayer)}
                       </span>
                     </div>
                   </div>
@@ -1591,7 +1652,7 @@ export function FloorModule({
                   >
                     {closing
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Encaissement…</>
-                      : <><CheckCircle2 className="h-4 w-4" /> {payment === 'credit' ? 'Céder à crédit' : 'Encaisser'} {formatCFA(totalLignes)}</>}
+                      : <><CheckCircle2 className="h-4 w-4" /> {payment === 'credit' ? 'Céder à crédit' : 'Encaisser'} {formatCFA(aPayer)}</>}
                   </Button>
                 </div>
               </div>

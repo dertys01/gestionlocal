@@ -138,6 +138,8 @@ const ORDER = [
   'migration_restaurant_covers.sql',
   // Paiement multiple (sale_payments) + partage par article (split_part).
   'migration_restaurant_payments.sql',
+  // Remises et offerts : remise sur l'addition, ligne offerte (patron/manager).
+  'migration_restaurant_discount.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -334,6 +336,8 @@ const DERNIERE_VERSION = [
   // DOIT fermer la liste : les migrations de facturation et hors-ligne,
   // rejouées plus haut, réinstallent les versions sans 'mixed'.
   'migration_restaurant_payments.sql',
+  // Remises et offerts : DERNIÈRE version de close_table_order (9 args).
+  'migration_restaurant_discount.sql',
 ];
 
 console.log(`\n▸ Rejouabilité (${REPLAYABLE.length} migrations incrémentales)`);
@@ -4258,6 +4262,53 @@ const PM_O = 'f0f0f0f0-0000-0000-0000-0000000000e2';
   await e('RESET ROLE');
   await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
   check('27d5. une somme de paiements fausse est refusée', refuseSomme);
+}
+
+// ─── 27e. Remises et offerts ──────────────────────────────────────────────
+console.log('\n▸ Restaurant — remises et offerts');
+
+const D_T = 'f0f0f0f0-0000-0000-0000-0000000000f1';
+const D_O = 'f0f0f0f0-0000-0000-0000-0000000000f2';
+{
+  await q(`INSERT INTO products (user_id, name, sku, price_sell, stock_qty)
+    VALUES ('${RESTO}', 'Plat remise', 'REM-1', 2000, 10)`);
+  const p = (await q(`SELECT id FROM products WHERE user_id='${RESTO}' AND sku='REM-1'`)).rows[0].id;
+  await q(`INSERT INTO restaurant_tables (id, owner_id, name, zone) VALUES ('${D_T}', '${RESTO}', 'Remise', 'Test')`);
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id) VALUES ('${D_O}', '${RESTO}', '${D_T}')`);
+  // Une ligne normale (2 000) et une ligne OFFERTE (comptée 0).
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price, is_offered)
+    VALUES ('${D_O}', '${p}', 1, 2000, false), ('${D_O}', '${p}', 1, 2000, true)`);
+
+  // Encaissement par le patron (RESTO) avec une remise de 500.
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let res;
+  try {
+    res = (await q(`SELECT close_table_order('${D_O}', 'cash', NULL, 1, NULL, NULL, 0, NULL, 500) AS r`)).rows[0].r;
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+  check('27e1. une ligne offerte ne compte pas dans l’addition (2 000 − 500 = 1 500)',
+    Number(res.total_amount) === 1500, JSON.stringify(res));
+  const sale = (await q(`SELECT total_amount, discount_amount FROM sales WHERE id='${res.sale_id}'`)).rows[0];
+  check('27e2. la remise est tracée sur la vente',
+    Number(sale.total_amount) === 1500 && Number(sale.discount_amount) === 500, JSON.stringify(sale));
+
+  // Un employé (caissier) ne peut pas accorder de remise.
+  const D_O2 = 'f0f0f0f0-0000-0000-0000-0000000000f3';
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id) VALUES ('${D_O2}', '${RESTO}', NULL)`);
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price)
+    VALUES ('${D_O2}', '${p}', 1, 2000)`);
+  await q(`SELECT set_config('request.jwt.claim.sub', '${SERVEUR}', false)`);
+  await e('SET ROLE authenticated');
+  let refuseRemise = false;
+  try {
+    await q(`SELECT close_table_order('${D_O2}', 'cash', NULL, 1, NULL, NULL, 0, NULL, 500)`);
+  } catch { refuseRemise = true; }
+  await e('RESET ROLE');
+  await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  check('27e3. un employé ne peut pas accorder de remise', refuseRemise);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

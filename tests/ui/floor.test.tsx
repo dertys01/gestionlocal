@@ -1006,3 +1006,49 @@ describe('FloorModule — partage par article et paiement multiple', () => {
     expect(supabase.rpc.mock.calls.some(([fn]) => fn === 'close_table_order')).toBe(false);
   });
 });
+
+describe('FloorModule — remises et offerts', () => {
+  it('offre une ligne (patron)', async () => {
+    acteur.canManageProducts = true;
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Offert' }));
+
+    await waitFor(() =>
+      expect(updates.some((u) => u.table === 'restaurant_order_items' && u.payload.is_offered === true)).toBe(true),
+    );
+  });
+
+  it('accorde une remise (patron) et l’envoie à l’encaissement', async () => {
+    acteur.canManageProducts = true;
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat); // 2 × 4 500 = 9 000
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.change(await screen.findByLabelText('Remise (F)'), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Encaisser/ }));
+
+    await waitFor(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith('close_table_order', expect.objectContaining({ p_discount: 1000 })),
+    );
+  });
+
+  it('un caissier ne voit ni la remise ni le bouton Offert', async () => {
+    acteur.canManageProducts = false;
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText('Fermer le panneau')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Remise (F)')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Offert' })).toBeNull();
+  });
+});
