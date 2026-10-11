@@ -142,6 +142,8 @@ const ORDER = [
   'migration_restaurant_discount.sql',
   // Tailles/variantes : supplément négatif autorisé (une « demi » coûte moins).
   'migration_restaurant_variants.sql',
+  // Formules : menus composés (groupes + composants, stock par composants).
+  'migration_restaurant_formules.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -340,6 +342,10 @@ const DERNIERE_VERSION = [
   'migration_restaurant_payments.sql',
   // Remises et offerts : DERNIÈRE version de close_table_order (9 args).
   'migration_restaurant_discount.sql',
+  // Formules : DERNIÈRE version de create_sale (composants + formule non
+  // stockée), de close_table_order (composants portés à la vente) et du
+  // déclencheur de stock (composants consommés). DOIT fermer la liste.
+  'migration_restaurant_formules.sql',
 ];
 
 console.log(`\n▸ Rejouabilité (${REPLAYABLE.length} migrations incrémentales)`);
@@ -4335,6 +4341,79 @@ console.log('\n▸ Restaurant — tailles et variantes');
       VALUES ('${RESTO}', '${V_P}', 'Trop', -2000000)`);
   } catch { refuseHorsBornes = true; }
   check('27f2. un supplément hors bornes est refusé', refuseHorsBornes);
+}
+
+// ─── 27g. Formules : menus composés ───────────────────────────────────────
+console.log('\n▸ Restaurant — formules');
+
+const F_RIZ = 'f0f0f0f0-0000-0000-0000-0000000000a1';   // ingrédient
+const F_PLAT = 'f0f0f0f0-0000-0000-0000-0000000000a2';  // plat (recette)
+const F_BOIS = 'f0f0f0f0-0000-0000-0000-0000000000a3';  // article stocké (feuille)
+const F_FORM = 'f0f0f0f0-0000-0000-0000-0000000000a4';  // la formule
+const F_T = 'f0f0f0f0-0000-0000-0000-0000000000a5';
+const F_O = 'f0f0f0f0-0000-0000-0000-0000000000a6';
+{
+  await q(`INSERT INTO products (id, user_id, name, sku, price_sell, stock_qty)
+    VALUES ('${F_RIZ}', '${RESTO}', 'Riz formule', 'FR-1', 0, 10),
+           ('${F_BOIS}', '${RESTO}', 'Boisson formule', 'FB-1', 0, 5)`);
+  await q(`INSERT INTO products (id, user_id, name, sku, price_sell, stock_qty)
+    VALUES ('${F_PLAT}', '${RESTO}', 'Plat formule', 'FP-1', 0, 0)`);
+  await q(`INSERT INTO recipe_ingredients (dish_id, ingredient_id, quantity)
+    VALUES ('${F_PLAT}', '${F_RIZ}', 1)`);
+  await q(`INSERT INTO products (id, user_id, name, sku, price_sell, stock_qty, is_formule)
+    VALUES ('${F_FORM}', '${RESTO}', 'Formule test', 'FF-1', 3000, 0, true)`);
+
+  const gPlat = (await q(`INSERT INTO formule_groups (owner_id, formule_id, name, min_select, max_select)
+    VALUES ('${RESTO}', '${F_FORM}', 'Plat', 1, 1) RETURNING id`)).rows[0].id;
+  const gBois = (await q(`INSERT INTO formule_groups (owner_id, formule_id, name, min_select, max_select)
+    VALUES ('${RESTO}', '${F_FORM}', 'Boisson', 1, 1) RETURNING id`)).rows[0].id;
+  await q(`INSERT INTO formule_group_items (group_id, product_id) VALUES ('${gPlat}', '${F_PLAT}')`);
+  await q(`INSERT INTO formule_group_items (group_id, product_id) VALUES ('${gBois}', '${F_BOIS}')`);
+
+  await q(`INSERT INTO restaurant_tables (id, owner_id, name, zone) VALUES ('${F_T}', '${RESTO}', 'Formule', 'Test')`);
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id) VALUES ('${F_O}', '${RESTO}', '${F_T}')`);
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price, components)
+    VALUES ('${F_O}', '${F_FORM}', 1, 3000,
+      '[{"group":"Plat","product_id":"${F_PLAT}","name":"Plat formule"},
+        {"group":"Boisson","product_id":"${F_BOIS}","name":"Boisson formule"}]'::jsonb)`);
+
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let res;
+  try {
+    res = (await q(`SELECT close_table_order('${F_O}', 'cash') AS r`)).rows[0].r;
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+
+  check('27g1. la formule est vendue à son prix (3 000 F)',
+    Number(res.total_amount) === 3000, JSON.stringify(res));
+
+  const comps = (await q(`SELECT components FROM sale_items WHERE sale_id='${res.sale_id}'`)).rows[0].components;
+  check('27g2. les composants choisis sont figés sur la ligne de vente',
+    Array.isArray(comps) && comps.length === 2, JSON.stringify(comps));
+
+  const riz = Number((await q(`SELECT stock_qty FROM products WHERE id='${F_RIZ}'`)).rows[0].stock_qty);
+  check('27g3. l\'ingrédient du composant-plat est consommé (10 → 9)', riz === 9, `riz : ${riz}`);
+
+  const bois = Number((await q(`SELECT stock_qty FROM products WHERE id='${F_BOIS}'`)).rows[0].stock_qty);
+  check('27g4. un composant stocké (feuille) est décrémenté (5 → 4)', bois === 4, `boisson : ${bois}`);
+
+  const form = Number((await q(`SELECT stock_qty FROM products WHERE id='${F_FORM}'`)).rows[0].stock_qty);
+  check('27g5. la formule elle-même n\'est pas stockée (reste à 0)', form === 0, `formule : ${form}`);
+
+  // Un composant qui ne fait pas partie de la formule est refusé (create_sale).
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let refuseHorsFormule = false;
+  try {
+    await q(`SELECT create_sale('[{"product_id":"${F_FORM}","quantity":1,"unit_price":3000,
+      "components":[{"product_id":"${F_RIZ}"}]}]'::jsonb, 'cash')`);
+  } catch { refuseHorsFormule = true; }
+  await e('RESET ROLE');
+  await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  check('27g6. un composant hors formule est refusé', refuseHorsFormule);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

@@ -14,6 +14,7 @@ import {
   FileText,
   PackageX,
   RotateCcw,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatCFA, formatQty } from '@/lib/utils/currency';
+import { FormulePicker } from '@/components/restaurant/FormulePicker';
 import { rechercher } from '@/lib/utils/productSearch';
 import { lireMontant } from '@/lib/utils/nombres';
 import { generateWhatsAppReceiptLink } from '@/lib/utils/whatsapp';
@@ -34,7 +36,7 @@ import { peutDelivrerFacture } from '@/lib/mecef/gate';
 import { useLiaisonMecef } from '@/lib/hooks/useLiaisonMecef';
 import { mettreEnFile } from '@/lib/offline/queue';
 import { nouvelleRefVente } from '@/lib/offline/ref';
-import type { Product, CartItem } from '@/types';
+import type { Product, CartItem, CartComponent } from '@/types';
 
 interface POSModuleProps {
   products: Product[];
@@ -219,10 +221,16 @@ const LigneProduit = memo(function LigneProduit({
   );
 });
 
+/** Clé d'une ligne de panier : le produit ET ses composants (formule). */
+const cleItem = (i: CartItem) => `${i.product.id}|${JSON.stringify(i.components ?? [])}`;
+
 export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToCartHandled, onReceiptClosed }: POSModuleProps) {
   const { supabase, ownerId, actorName, org, plan } = useSupabase();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [scanError, setScanError] = useState('');
+  // Formule en cours de composition au comptoir (null = aucune).
+  const [formuleEnCours, setFormuleEnCours] = useState<Product | null>(null);
+  const [formuleChoix, setFormuleChoix] = useState<CartComponent[]>([]);
+  const [formuleValide, setFormuleValide] = useState(false);  const [scanError, setScanError] = useState('');
   const [search, setSearch] = useState('');
   /** Catégorie retenue dans la barre de filtres ; null = tout le catalogue. */
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -267,7 +275,7 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
    * disait rien.
    */
   const vendable = useCallback(
-    (p: Product) => dishIds.has(p.id) || p.stock_qty > 0,
+    (p: Product) => dishIds.has(p.id) || p.is_formule || p.stock_qty > 0,
     [dishIds],
   );
   const rechercheRef = useRef<HTMLInputElement>(null);
@@ -687,8 +695,14 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     return m;
   }, [cart]);
 
-  // Prix effectif de la ligne : prix convenu s'il y en a un, sinon catalogue.
-  const linePrice = (item: CartItem) => item.unitPrice ?? item.product.price_sell;
+  // Supplément des composants d'une formule (entrée/plat/dessert/boisson).
+  const extraComposants = (item: CartItem) =>
+    (item.components ?? []).reduce((s, c) => s + c.extra_price, 0);
+
+  // Prix effectif de la ligne : prix convenu s'il y en a un, sinon catalogue,
+  // plus les suppléments des composants d'une formule.
+  const linePrice = (item: CartItem) =>
+    (item.unitPrice ?? item.product.price_sell) + extraComposants(item);
 
   /**
    * Unités, pas lignes de panier. Deux fois le même téléphone est « 2 articles »
@@ -742,20 +756,22 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
   const creditFormIncomplete =
     paymentMethod === 'credit' && (creditNeedsPhone || !clientName.trim() || !advanceOk || advanceTooHigh);
 
-  const addToCart = useCallback((product: Product) => {
+  const addToCart = useCallback((product: Product, components: CartItem['components'] = null) => {
     setCart((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
+      const cible = `${product.id}|${JSON.stringify(components ?? [])}`;
+      const existing = prev.find((i) => cleItem(i) === cible);
       if (existing) {
-        // Jamais au-delà du stock... SAUF pour un plat : son stock propre vaut 0
-        // par nature, et une borne à 0 figerait la ligne à 0 — le plat serait
-        // invendable au comptoir, comme en salle.
-        const plafond = dishIds.has(product.id) ? Number.POSITIVE_INFINITY : product.stock_qty;
+        // Jamais au-delà du stock... SAUF pour un plat ou une formule : leur
+        // stock propre vaut 0 par nature, et une borne à 0 figerait la ligne.
+        const plafond = dishIds.has(product.id) || product.is_formule
+          ? Number.POSITIVE_INFINITY
+          : product.stock_qty;
         if (existing.quantity >= plafond) return prev;
         return prev.map((i) =>
-          i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+          cleItem(i) === cible ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
-      return [...prev, { product, quantity: 1, unitPrice: null }];
+      return [...prev, { product, quantity: 1, unitPrice: null, components }];
     });
   }, [dishIds]);
 
@@ -774,6 +790,12 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
       return;
     }
     setScanError('');
+    // Une formule ouvre le sélecteur : ses composants se choisissent avant
+    // l'ajout, car c'est leur stock qui part (pas celui de la formule).
+    if (product.is_formule) {
+      setFormuleEnCours(product);
+      return;
+    }
     addToCart(product);
   }, [vendable, addToCart]);
 
@@ -785,18 +807,18 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
    * pouvoir terminer sa saisie. C'est create_sale() qui refuse, avec un message
    * qui nomme le produit et les deux quantités.
    */
-  const setLineQty = useCallback((productId: string, raw: string) => {
+  const setLineQty = useCallback((cle: string, raw: string) => {
     setCart((prev) => prev.map((i) => {
-      if (i.product.id !== productId) return i;
+      if (cleItem(i) !== cle) return i;
       const n = lireMontant(raw);
       if (n === null || n <= 0) return i;
       return { ...i, quantity: Math.min(n, 1000000) };
     }));
   }, []);
 
-  const setLinePrice = useCallback((productId: string, raw: string) => {
+  const setLinePrice = useCallback((cle: string, raw: string) => {
     setCart((prev) => prev.map((i) => {
-      if (i.product.id !== productId) return i;
+      if (cleItem(i) !== cle) return i;
       // Vide = retour au prix catalogue, pas un prix à zéro.
       if (raw.trim() === '') return { ...i, unitPrice: null };
       const n = lireMontant(raw);
@@ -839,8 +861,8 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     addToCart(product);
   }, [addToCartRequest, products, addToCart, onAddToCartHandled, vendable]);
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== productId));
+  const removeFromCart = useCallback((cle: string) => {
+    setCart((prev) => prev.filter((i) => cleItem(i) !== cle));
   }, []);
 
   const handleCheckout = async () => {
@@ -851,13 +873,26 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     // Tout ce qui prépare l'appel est calculé AVANT le try : le catch a besoin
     // de `payload` et `refVente` pour mettre la vente en file hors-ligne. Rien
     // ici ne lève.
-    const items = cart.map((i) => ({
-      product_id: i.product.id,
-      quantity: i.quantity,
-      // Absent quand le prix catalogue s'applique : le serveur garde alors
-      // son comportement habituel. Envoyé seulement s'il y a eu marchandage.
-      ...(i.unitPrice !== null ? { unit_price: i.unitPrice } : {}),
-    }));
+    const items = cart.map((i) => {
+      // Formule : le prix de la ligne (formule + suppléments des composants)
+      // part tel quel, et les composants voyagent pour que le stock soit
+      // consommé sur eux.
+      if ((i.components ?? []).length > 0) {
+        return {
+          product_id: i.product.id,
+          quantity: i.quantity,
+          unit_price: linePrice(i),
+          components: i.components,
+        };
+      }
+      return {
+        product_id: i.product.id,
+        quantity: i.quantity,
+        // Absent quand le prix catalogue s'applique : le serveur garde alors
+        // son comportement habituel. Envoyé seulement s'il y a eu marchandage.
+        ...(i.unitPrice !== null ? { unit_price: i.unitPrice } : {}),
+      };
+    });
 
     // Le crédit passe par record_credit_sale() et non create_sale() : c'est
     // elle qui rattache la vente à un numéro de téléphone et la marque non
@@ -1412,7 +1447,7 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
               const sousCout = prix < item.product.price_buy;
               return (
               <Card
-                key={item.product.id}
+                key={cleItem(item)}
                 className={`shadow-none ${remise ? 'border-amber-300' : 'border-slate-200'}`}
               >
                 <CardContent className="p-3 space-y-2">
@@ -1421,6 +1456,11 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
                       <div className="text-sm font-medium text-slate-800 truncate">
                         {item.product.name}
                       </div>
+                      {(item.components ?? []).length > 0 && (
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {item.components!.map((c) => `${c.group} : ${c.name}`).join(' · ')}
+                        </div>
+                      )}
                       <div className="text-xs text-indigo-600 font-semibold">
                         {formatCFA(prix * item.quantity)}
                       </div>
@@ -1442,7 +1482,7 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
                         type="text"
                         inputMode="decimal"
                         value={item.quantity}
-                        onChange={(e) => setLineQty(item.product.id, e.target.value)}
+                        onChange={(e) => setLineQty(cleItem(item), e.target.value)}
                         aria-label={`Quantité pour ${item.product.name}`}
                         className="w-16 rounded-lg border border-slate-200 px-1.5 py-1 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
@@ -1451,7 +1491,7 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
                       </span>
                       <button
                         aria-label="Retirer du panier"
-                        onClick={() => removeFromCart(item.product.id)}
+                        onClick={() => removeFromCart(cleItem(item))}
                         className="ml-1 text-red-500 hover:text-red-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1473,7 +1513,7 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
                       min="0"
                       step="1"
                       value={item.unitPrice ?? ''}
-                      onChange={(e) => setLinePrice(item.product.id, e.target.value)}
+                      onChange={(e) => setLinePrice(cleItem(item), e.target.value)}
                       placeholder={String(item.product.price_sell)}
                       aria-label={`Prix unitaire négocié pour ${item.product.name}`}
                       className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1898,6 +1938,51 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Sélecteur de formule ──
+          Une formule ne s'ajoute pas d'un clic : ses composants (entrée, plat,
+          dessert, boisson) se choisissent d'abord. C'est leur stock qui partira,
+          pas celui de la formule. */}
+      {formuleEnCours && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h2 className="font-bold text-slate-800">{formuleEnCours.name}</h2>
+              <button
+                onClick={() => { setFormuleEnCours(null); setFormuleChoix([]); setFormuleValide(false); }}
+                className="text-slate-500 hover:text-slate-600"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <FormulePicker
+                formule={{ id: formuleEnCours.id, name: formuleEnCours.name, price_sell: formuleEnCours.price_sell }}
+                onChange={(comps, ok) => { setFormuleChoix(comps); setFormuleValide(ok); }}
+              />
+              <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                <span className="text-sm text-slate-600">Prix de la formule</span>
+                <span className="font-semibold text-slate-800">
+                  {formatCFA(formuleEnCours.price_sell + formuleChoix.reduce((s, c) => s + c.extra_price, 0))}
+                </span>
+              </div>
+              <Button
+                onClick={() => {
+                  addToCart(formuleEnCours, formuleChoix);
+                  setFormuleEnCours(null);
+                  setFormuleChoix([]);
+                  setFormuleValide(false);
+                }}
+                disabled={!formuleValide}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2"
+              >
+                <Plus className="h-4 w-4" /> Ajouter au panier
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Barre fixe, mobile seulement ──
           Le total et l'accès à la caisse restent sous le pouce. Sans elle, le

@@ -10,7 +10,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
  * Sprint 14 écrira dans `sales`.
  */
 
-const { salle, prises, inserts, lignesCommande, modificateurs, updates, dishRows } = vi.hoisted(() => {
+const { salle, prises, inserts, lignesCommande, modificateurs, updates, dishRows, groupesFormule } = vi.hoisted(() => {
   const inserts: Array<Record<string, unknown>> = [];
   return {
     salle: [] as unknown[],
@@ -22,6 +22,8 @@ const { salle, prises, inserts, lignesCommande, modificateurs, updates, dishRows
     // Lignes renvoyées par recipe_ingredients : quels produits sont des PLATS
     // (dish_id) et quels produits sont des INGRÉDIENTS (ingredient_id).
     dishRows: [] as Array<{ dish_id?: string; ingredient_id?: string }>,
+    // Groupes d'une formule (avec leurs choix), renvoyés par formule_groups.
+    groupesFormule: [] as unknown[],
   };
 });
 
@@ -78,7 +80,9 @@ const supabase = {
             ? chaine(prises, table)
             : table === 'recipe_ingredients'
               ? chaine(dishRows, table)
-              : chaine({ id: 'x' }, table),
+              : table === 'formule_groups'
+                ? chaine(groupesFormule, table)
+                : chaine({ id: 'x' }, table),
   rpc: vi.fn(async (fn: string, _args?: unknown) => {
     void _args; // le 2ᵉ argument typé permet aux tests de lire les paramètres
     rpcResultats.push(fn);
@@ -131,6 +135,13 @@ const produits = [
   { id: 'p1', name: 'Poulet braisé', sku: 'POU', price_buy: 2000, price_sell: 4500, stock_qty: 30, min_stock_level: 5, category: 'Plats', unit: 'pce' },
 ] as unknown as Product[];
 
+/** Un produit « formule » : menu composé, vendu à son prix, sans stock propre. */
+const formuleProduit = {
+  id: 'f1', name: 'Formule maquis', sku: 'FOR', price_buy: 0, price_sell: 5000,
+  stock_qty: 0, min_stock_level: 0, category: 'Formules', unit: 'pce', is_formule: true,
+} as unknown as Product;
+const produitsAvecFormule = [...produits, formuleProduit];
+
 const table = (over: Record<string, unknown> = {}) => ({
   id: 't1',
   name: 'Table 1',
@@ -171,6 +182,11 @@ function definirModificateurs(...ms: unknown[]) {
   modificateurs.push(...ms);
 }
 
+function definirFormule(...groupes: unknown[]) {
+  groupesFormule.length = 0;
+  groupesFormule.push(...groupes);
+}
+
 const plat = {
   id: 'l1',
   product_id: 'p1',
@@ -190,6 +206,7 @@ beforeEach(() => {
   updates.length = 0;
   inserts.length = 0;
   prises.length = 0;
+  groupesFormule.length = 0;
   // Les appels RPC s'accumulaient d'un test à l'autre : un `find` renvoyait un
   // appel d'un test précédent. On vide, comme pour les inserts.
   supabase.rpc.mockClear();
@@ -1068,5 +1085,53 @@ describe('FloorModule — tailles et variantes', () => {
     await waitFor(() => expect(screen.getByText(/Demi portion/)).toBeInTheDocument());
     // Le supplément négatif s'affiche comme une remise (−1 000 F).
     expect(screen.getByText(/−1\s000 F/)).toBeInTheDocument();
+  });
+});
+
+describe('FloorModule — formules', () => {
+  it('ajoute une formule avec ses composants choisis', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    definirFormule({
+      id: 'g1', name: 'Plat', min_select: 1, max_select: 1, sort_order: 0,
+      formule_group_items: [
+        { product_id: 'p1', extra_price: 0, sort_order: 0, product: { name: 'Salade' } },
+        { product_id: 'p2', extra_price: 500, sort_order: 1, product: { name: 'Soupe' } },
+      ],
+    });
+    render(<FloorModule products={produitsAvecFormule} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.click(await screen.findByText('Formule maquis'));
+
+    // Le sélecteur charge les groupes : on choisit un plat, puis on ajoute.
+    fireEvent.click(await screen.findByText('Salade'));
+    fireEvent.click(screen.getByRole('button', { name: /Ajouter à la commande/ }));
+
+    await waitFor(() =>
+      expect(inserts.some((i) =>
+        i.product_id === 'f1'
+        && Array.isArray(i.components)
+        && (i.components as Array<{ product_id: string }>)[0]?.product_id === 'p1',
+      )).toBe(true),
+    );
+  });
+
+  it('n’autorise l’ajout qu’une fois chaque groupe obligatoire choisi', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    definirFormule({
+      id: 'g1', name: 'Plat', min_select: 1, max_select: 1, sort_order: 0,
+      formule_group_items: [{ product_id: 'p1', extra_price: 0, product: { name: 'Salade' } }],
+    });
+    render(<FloorModule products={produitsAvecFormule} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.click(await screen.findByText('Formule maquis'));
+
+    await screen.findByText('Salade');
+    expect(screen.getByRole('button', { name: /Ajouter à la commande/ })).toBeDisabled();
   });
 });

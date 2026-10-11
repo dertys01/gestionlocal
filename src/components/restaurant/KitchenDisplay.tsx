@@ -17,6 +17,8 @@ interface LigneCuisine {
   quantity: number;
   note: string | null;
   modifier: string | null;
+  /** Composants d'une formule : ce que la cuisine doit réellement préparer. */
+  components: Array<{ group: string; name: string }> | null;
   sent_at: string | null;
   table_name: string | null;
   customer_name: string | null;
@@ -63,7 +65,7 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
     try {
       const { data: items, error: e1 } = await supabase
         .from('restaurant_order_items')
-        .select('id, order_id, quantity, note, modifier, sent_at, product_id')
+        .select('id, order_id, quantity, note, modifier, sent_at, product_id, components')
         .eq('status', 'sent')
         .order('sent_at', { ascending: true });
       if (e1) throw new Error(e1.message);
@@ -71,6 +73,7 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
       const list = (items ?? []) as Array<{
         id: string; order_id: string; quantity: number; note: string | null;
         modifier: string | null; sent_at: string | null; product_id: string;
+        components: Array<{ group: string; name: string }> | null;
       }>;
       const orderIds = [...new Set(list.map((l) => l.order_id))];
 
@@ -104,6 +107,7 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
           quantity: Number(l.quantity),
           note: l.note,
           modifier: l.modifier,
+          components: l.components,
           sent_at: l.sent_at,
           table_name: o?.table_id ? (parTable.get(o.table_id) ?? null) : null,
           customer_name: o?.customer_name ?? null,
@@ -217,6 +221,15 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
                         <span className="shrink-0 font-bold text-slate-800 tabular-nums">{formatQty(l.quantity)}×</span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm text-slate-700 truncate">{l.product_name}</span>
+                          {l.components && l.components.length > 0 && (
+                            <span className="block text-[11px] text-slate-600">
+                              {l.components.map((c) => (
+                                <span key={`${c.group}-${c.name}`} className="block">
+                                  <span className="text-slate-400">{c.group} :</span> {c.name}
+                                </span>
+                              ))}
+                            </span>
+                          )}
                           {l.modifier && <span className="block text-[11px] text-indigo-700">{l.modifier}</span>}
                           {l.note && <span className="block text-[11px] text-amber-700">{l.note}</span>}
                         </span>

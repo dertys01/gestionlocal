@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { logActivity } from '@/lib/utils/activity';
 import { formatCFA, formatQty } from '@/lib/utils/currency';
+import { FormulePicker, type FormuleComponent } from '@/components/restaurant/FormulePicker';
 import { printKitchenTicket } from '@/lib/utils/kitchen';
 import { platsServisAujourdhui } from '@/lib/utils/menu';
 import { loadDishIds, loadIngredientIds, estVendableAuMenu } from '@/lib/utils/dishes';
@@ -59,6 +60,8 @@ interface OrderLine {
   split_part: number | null;
   /** Ligne offerte (tournée) : exclue de l'addition. */
   is_offered: boolean;
+  /** Composants d'une formule (entrée/plat/dessert/boisson), figés à la commande. */
+  components: Array<{ group: string; product_id: string; name: string; extra_price: number }> | null;
   name?: string;
 }
 
@@ -199,6 +202,9 @@ export function FloorModule({
   const [modifiersLoading, setModifiersLoading] = useState(false);
   const [modSelection, setModSelection] = useState('');
   const [platChoisi, setPlatChoisi] = useState<Product | null>(null);
+  // Sélection d'une formule : composants choisis (par groupe) + validité.
+  const [formuleComps, setFormuleComps] = useState<FormuleComponent[]>([]);
+  const [formuleValide, setFormuleValide] = useState(false);
   // Carte du jour : un restaurant ne sert pas le poisson le mardi. Sans ce
   // filtre, la commande propose des plats que la cuisine ne cuisine pas.
   const [menuDuJour, setMenuDuJour] = useState(true);
@@ -216,7 +222,7 @@ export function FloorModule({
     return () => { vivant = false; };
   }, [db]);
   /** Un produit est vendable s'il a une recette (plat) ou du stock. */
-  const vendable = (p: Product) => dishIds.has(p.id) || Number(p.stock_qty) > 0;
+  const vendable = (p: Product) => dishIds.has(p.id) || p.is_formule || Number(p.stock_qty) > 0;
 
   /**
    * Remet la saisie d'ajout à zéro (plat, option, quantité, note, recherche).
@@ -294,7 +300,7 @@ export function FloorModule({
     setLinesLoading(true);
     const { data, error: err } = await db
       .from('restaurant_order_items')
-      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, split_part, is_offered, product:products(name)')
+      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, split_part, is_offered, components, product:products(name)')
       .eq('order_id', id)
       .order('created_at');
     // Une réponse d'une table déjà quittée est ignorée : sinon ses lignes
@@ -584,6 +590,42 @@ export function FloorModule({
     setQty('');
     setNote('');
     setModSelection('');
+    setPlatChoisi(null);
+    await Promise.all([loadLines(orderId), loadTables()]);
+  };
+
+  /**
+   * Ajoute une FORMULE à la commande : le produit est vendu à son prix, ses
+   * composants choisis sont figés sur la ligne (pour la cuisine et le stock), et
+   * la somme des suppléments de composants va dans extra_price.
+   */
+  const addFormuleLine = async (product: Product) => {
+    if (!orderId) return;
+    if (!formuleValide || formuleComps.length === 0) {
+      setError('Complétez chaque groupe de la formule avant d’ajouter.');
+      return;
+    }
+    const n = qty.trim() === '' ? 1 : lireMontant(qty);
+    if (n === null || n <= 0) { setError('La quantité doit être un nombre supérieur à zéro.'); return; }
+    if (n > 1000) { setError('Une ligne de commande ne peut pas dépasser 1 000 portions.'); return; }
+    const extra = formuleComps.reduce((s, c) => s + c.extra_price, 0);
+    setBusy(true);
+    setError('');
+    const { error: err } = await db.from('restaurant_order_items').insert({
+      order_id: orderId,
+      product_id: product.id,
+      quantity: n,
+      unit_price: product.price_sell,
+      extra_price: extra,
+      components: formuleComps,
+      note: note.trim() || null,
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setQty('');
+    setNote('');
+    setFormuleComps([]);
+    setFormuleValide(false);
     setPlatChoisi(null);
     await Promise.all([loadLines(orderId), loadTables()]);
   };
@@ -1341,6 +1383,11 @@ export function FloorModule({
                         )}
                       </div>
                       {l.note && <div className="text-xs text-amber-700 truncate">{l.note}</div>}
+                      {l.components && l.components.length > 0 && (
+                        <div className="text-xs text-slate-500 truncate">
+                          {l.components.map((c) => `${c.group} : ${c.name}`).join(' · ')}
+                        </div>
+                      )}
                     </div>
                     <span className={`text-sm font-medium whitespace-nowrap ${l.is_offered ? 'text-emerald-700' : 'text-slate-700'}`}>
                       {/* Le supplément entre dans le montant de la ligne : c'est
@@ -1813,7 +1860,14 @@ export function FloorModule({
                             setError(`« ${p.name} » est en rupture de stock. Réapprovisionnez-le, ou donnez-lui une recette (onglet Recettes).`);
                             return;
                           }
-                          if (platChoisi?.id === p.id) { void addLine(p); return; }
+                          if (platChoisi?.id === p.id) {
+                            // Une formule ne s'ajoute pas au second clic : ses
+                            // composants se choisissent dans le sélecteur, dont
+                            // le bouton porte l'ajout.
+                            if (p.is_formule) return;
+                            void addLine(p);
+                            return;
+                          }
                           setPlatChoisi(p);
                           setModSelection('');
                         }}
@@ -1845,7 +1899,13 @@ export function FloorModule({
                     {platChoisi.name}
                   </p>
 
-                  {modifiersLoading ? (
+                  {platChoisi.is_formule ? (
+                    <FormulePicker
+                      formule={{ id: platChoisi.id, name: platChoisi.name, price_sell: platChoisi.price_sell }}
+                      disabled={busy}
+                      onChange={(comps, ok) => { setFormuleComps(comps); setFormuleValide(ok); }}
+                    />
+                  ) : modifiersLoading ? (
                     <p className="text-xs text-slate-500">Chargement des options…</p>
                   ) : modifiers.length === 0 ? (
                     <p className="text-xs text-slate-500">
@@ -1877,7 +1937,7 @@ export function FloorModule({
                     </div>
                   )}
 
-                  {modifiers.some((m) => m.is_required) && !modSelection && (
+                  {!platChoisi.is_formule && modifiers.some((m) => m.is_required) && !modSelection && (
                     <p className="text-xs text-amber-700">
                       Choisissez l&apos;option obligatoire avant d&apos;ajouter le plat.
                     </p>
@@ -1885,8 +1945,8 @@ export function FloorModule({
 
                   <div className="flex items-center gap-2">
                     <Button
-                      onClick={() => addLine(platChoisi)}
-                      disabled={busy || (modifiers.some((m) => m.is_required) && !modSelection)}
+                      onClick={() => (platChoisi.is_formule ? addFormuleLine(platChoisi) : addLine(platChoisi))}
+                      disabled={busy || (platChoisi.is_formule ? !formuleValide : (modifiers.some((m) => m.is_required) && !modSelection))}
                       className="bg-indigo-600 hover:bg-indigo-700 gap-2"
                     >
                       {busy
@@ -1895,7 +1955,7 @@ export function FloorModule({
                       Ajouter à la commande
                     </Button>
                     <button
-                      onClick={() => { setPlatChoisi(null); setModSelection(''); }}
+                      onClick={() => { setPlatChoisi(null); setModSelection(''); setFormuleComps([]); setFormuleValide(false); }}
                       className="text-xs text-slate-500 hover:text-slate-700 underline"
                     >
                       Annuler

@@ -48,7 +48,7 @@ const RETAIL_ONLY: Tab[] = ['forecast'];
  * arrivent aux sprints 14 et 15 : la liste existe pour qu'un module de plus
  * soit une ligne, pas une refonte.
  */
-const RESTAURANT_ONLY: Tab[] = ['floor', 'kitchen', 'recipes'];
+const RESTAURANT_ONLY: Tab[] = ['floor', 'kitchen', 'recipes', 'formules'];
 
 export const DOMAIN_MODULES: Record<Domain, Tab[]> = {
   retail: [...COMMUN, ...RETAIL_ONLY],
@@ -93,7 +93,7 @@ export function normalizeUiMode(raw: unknown): UiMode {
  * récupérer son argent. Les dépenses et la rentabilité vivent dans Rapports.
  * Les réglages restent : c'est là que se trouve le retour au mode complet.
  */
-const MASQUES_EN_MODE_SIMPLE: Tab[] = ['reports', 'forecast', 'team', 'recipes'];
+const MASQUES_EN_MODE_SIMPLE: Tab[] = ['reports', 'forecast', 'team', 'recipes', 'formules'];
 
 /** Modules rendus pour un domaine. Toujours une copie : l'appelant peut trier. */
 export function getEnabledModules(domain: unknown, uiMode: unknown = 'full'): Tab[] {

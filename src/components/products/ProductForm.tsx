@@ -81,6 +81,7 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
     min_stock_level: product ? String(product.min_stock_level) : '5',
     supplier_id: product?.supplier_id ?? null,
     unit: product?.unit ?? 'pce',
+    is_formule: product?.is_formule ?? false,
   }));
 
   const set = (key: string, value: string | null) =>
@@ -148,6 +149,7 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
         // detachait rien, la colonne gardait l'ancienne valeur.
         supplier_id: form.supplier_id,
         unit: form.unit.trim() || 'pce',
+        is_formule: form.is_formule,
       };
 
       let err;
@@ -334,6 +336,22 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
               ))}
             </div>
           </div>
+
+          {/* Formule : menu composé */}
+          <label className="flex items-start gap-2 rounded-lg border border-slate-200 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_formule}
+              onChange={(e) => setForm((prev) => ({ ...prev, is_formule: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600"
+            />
+            <span className="text-sm">
+              <span className="font-medium text-slate-700">Formule (menu composé)</span>
+              <span className="block text-xs text-slate-500">
+                Entrée + plat + dessert + boisson à prix fixe. Les choix se composent dans l&apos;onglet Formules ; le stock part des composants.
+              </span>
+            </span>
+          </label>
 
           {/* Stock */}
           <div className="grid grid-cols-2 gap-3">

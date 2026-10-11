@@ -116,4 +116,20 @@ describe('KitchenDisplay', () => {
     await waitFor(() => expect(screen.getByText('Table 3')).toBeInTheDocument());
     expect(screen.queryByText('Table 9')).toBeNull();
   });
+
+  it('affiche les composants d’une formule (ce que la cuisine prépare)', async () => {
+    h.state.items = [ligne({
+      modifier: null,
+      note: null,
+      components: [
+        { group: 'Plat', name: 'Poulet braisé' },
+        { group: 'Boisson', name: 'Coca' },
+      ],
+    })];
+    render(<KitchenDisplay products={PRODUITS} />);
+
+    await waitFor(() => expect(screen.getByText(/Poulet braisé/)).toBeInTheDocument());
+    expect(screen.getByText(/Coca/)).toBeInTheDocument();
+    expect(screen.getByText(/Plat :/)).toBeInTheDocument();
+  });
 });

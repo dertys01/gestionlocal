@@ -31,6 +31,14 @@ export interface Product {
    * cuisine ne cuisine pas ce qui n'est pas au menu.
    */
   menu_days: number[] | null;
+  /**
+   * Menu composé : le client choisit dans chaque groupe (entrée, plat,
+   * dessert, boisson). Une formule ne se stocke pas — ce sont ses composants
+   * choisis qui sortent du stock. Restaurant uniquement.
+   *
+   * Optionnel : les lignes lues avant la migration n'ont pas la colonne.
+   */
+  is_formule?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -225,6 +233,20 @@ export interface CartItem {
    * côté serveur (`sale_items.list_price`), donc la remise est traçable.
    */
   unitPrice: number | null;
+  /**
+   * Composants choisis d'une formule (entrée/plat/dessert/boisson). `null` ou
+   * absent pour un article normal. Le serveur consomme le stock de ces
+   * composants, pas celui de la formule.
+   */
+  components?: CartComponent[] | null;
+}
+
+/** Composant d'une formule, tel que figé dans le panier. */
+export interface CartComponent {
+  group: string;
+  product_id: string;
+  name: string;
+  extra_price: number;
 }
 
 /**
@@ -246,6 +268,7 @@ export type Tab =
   | 'floor'
   | 'kitchen'
   | 'recipes'
+  | 'formules'
   | 'settings';
 
 /** Sous-vue de l'onglet Rapports. */

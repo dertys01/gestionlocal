@@ -13,6 +13,7 @@ import {
   Menu,
   UtensilsCrossed,
   ChefHat,
+  Layers,
   Flame,
   WifiOff,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ import { ReportsTab } from '@/components/reports/ReportsTab';
 import { ForecastModule } from '@/components/forecast/ForecastModule';
 import { FloorModule } from '@/components/restaurant/FloorModule';
 import { RecipesModule } from '@/components/restaurant/RecipesModule';
+import { FormulesModule } from '@/components/restaurant/FormulesModule';
 import { ReservationsModule } from '@/components/restaurant/ReservationsModule';
 import { KitchenDisplay } from '@/components/restaurant/KitchenDisplay';
 import { TeamModule } from '@/components/team/TeamModule';
@@ -248,6 +250,7 @@ export default function HomePage() {
     { key: 'floor',     label: 'Salle',     icon: UtensilsCrossed, locked: false },
     { key: 'kitchen',   label: 'Cuisine',   icon: Flame,           locked: false },
     { key: 'recipes',   label: 'Recettes',  icon: ChefHat,         locked: false },
+    { key: 'formules',  label: 'Formules',  icon: Layers,          locked: false },
     { key: 'team',      label: 'Équipe',     icon: Users,           locked: false },
   ];
 
@@ -461,6 +464,13 @@ export default function HomePage() {
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-slate-800">Recettes</h2>
               <RecipesModule />
+            </div>
+          )}
+
+          {tab === 'formules' && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-slate-800">Formules</h2>
+              <FormulesModule />
             </div>
           )}
 
