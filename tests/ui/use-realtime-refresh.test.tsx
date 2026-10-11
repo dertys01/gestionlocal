@@ -66,6 +66,24 @@ describe('useRealtimeRefresh', () => {
     expect(h.channel.subscribe).toHaveBeenCalled();
   });
 
+  it('filtre les tables restaurant sur leur vraie colonne de tenant', async () => {
+    const { useRealtimeRefresh } = await importer(true);
+    renderHook(() => useRealtimeRefresh(['restaurant_orders', 'restaurant_order_items'], () => {}));
+
+    // restaurant_orders → owner_id (pas user_id) ; restaurant_order_items →
+    // AUCUN filtre (elle n'a pas de colonne de tenant), la RLS fait le tri.
+    expect(h.channel.on).toHaveBeenCalledWith(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'restaurant_orders', filter: 'owner_id=eq.org-1' },
+      expect.any(Function),
+    );
+    expect(h.channel.on).toHaveBeenCalledWith(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'restaurant_order_items' },
+      expect.any(Function),
+    );
+  });
+
   it('regroupe les écritures en rafale et n’appelle onChange qu’une fois', async () => {
     vi.useFakeTimers();
     const { useRealtimeRefresh } = await importer(true);
