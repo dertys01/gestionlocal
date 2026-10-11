@@ -27,8 +27,8 @@ const { plats, rpc, supabase } = vi.hoisted(() => {
   // court. Ils ne doivent pas être traités de la même façon.
   const plats = [
     { id: 'riz-gras', name: 'Riz gras', category: 'Plats', price_buy: 0, price_sell: 2000, stock_qty: 0, min_stock_level: 0, unit: 'portion' },
-    { id: 'huile', name: 'Huile végétale 1 L', category: 'Ingrédients', price_buy: 900, price_sell: 1200, stock_qty: 0, min_stock_level: 2, unit: 'L' },
-    { id: 'oignon', name: 'Oignon', category: 'Ingrédients', price_buy: 350, price_sell: 700, stock_qty: 15, min_stock_level: 5, unit: 'kg' },
+    { id: 'huile', name: 'Huile végétale 1 L', category: 'Divers', price_buy: 900, price_sell: 1200, stock_qty: 0, min_stock_level: 2, unit: 'L' },
+    { id: 'oignon', name: 'Oignon', category: 'Divers', price_buy: 350, price_sell: 700, stock_qty: 15, min_stock_level: 5, unit: 'kg' },
   ];
   const rpc = vi.fn();
   // Les plats connus du restaurant : une seule requête, au montage.

@@ -35,6 +35,38 @@ export async function loadDishIds(db: Fromable): Promise<Set<string>> {
 }
 
 /**
+ * Une catégorie qui désigne des ingrédients (« Ingrédients », « Ingrédient »,
+ * « ingredient », accentué ou non). Le commerçant range ses ingrédients dans
+ * une catégorie : c'est le signal qu'il donne, en plus de l'usage réel dans une
+ * recette.
+ */
+export function categorieEstIngredient(category: string | null | undefined): boolean {
+  const c = (category ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return /ingredient/i.test(c);
+}
+
+/**
+ * Un produit doit-il figurer au menu de VENTE (caisse, salle) ?
+ *
+ *   • un PLAT (produit avec recette) se vend toujours — c'est le menu ;
+ *   • un INGRÉDIENT (utilisé dans une recette, ou rangé dans une catégorie
+ *     d'ingrédients) ne se vend pas : il vit dans le Stock ;
+ *   • tout le reste (boissons, articles divers) se vend.
+ *
+ * Le cas « à la fois plat et ingrédient » est tranché en faveur du plat : on ne
+ * masque pas un plat qu'un autre plat réutilise.
+ */
+export function estVendableAuMenu(
+  produit: { id: string; category?: string | null },
+  dishIds: Set<string>,
+  ingredientIds: Set<string>,
+): boolean {
+  if (dishIds.has(produit.id)) return true;
+  if (ingredientIds.has(produit.id)) return false;
+  return !categorieEstIngredient(produit.category);
+}
+
+/**
  * Identifiants des produits utilisés comme INGRÉDIENT dans une recette.
  *
  * Un ingrédient n'est pas un article de vente : il vit dans le Stock, pas dans

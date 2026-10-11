@@ -27,7 +27,7 @@ import { lireMontant } from '@/lib/utils/nombres';
 import { generateWhatsAppReceiptLink } from '@/lib/utils/whatsapp';
 import { logActivity } from '@/lib/utils/activity';
 import { printReceipt } from '@/lib/utils/print';
-import { loadDishIds, loadIngredientIds } from '@/lib/utils/dishes';
+import { loadDishIds, loadIngredientIds, estVendableAuMenu } from '@/lib/utils/dishes';
 import { useSupabase } from '@/components/providers/SupabaseProvider';
 import { isFeatureAllowed } from '@/lib/utils/plans';
 import { peutDelivrerFacture } from '@/lib/mecef/gate';
@@ -444,9 +444,8 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
       products.filter(
         (p) =>
           p.is_active !== false &&
-          // Un ingrédient (utilisé dans une recette) n'est pas un article de
-          // vente — sauf s'il est AUSSI un plat, auquel cas il reste vendable.
-          !(ingredientIds.has(p.id) && !dishIds.has(p.id)),
+          // Un ingrédient n'est pas un article de vente : il vit dans le Stock.
+          estVendableAuMenu(p, dishIds, ingredientIds),
       ),
     [products, ingredientIds, dishIds],
   );

@@ -16,7 +16,7 @@ import { logActivity } from '@/lib/utils/activity';
 import { formatCFA, formatQty } from '@/lib/utils/currency';
 import { printKitchenTicket } from '@/lib/utils/kitchen';
 import { platsServisAujourdhui } from '@/lib/utils/menu';
-import { loadDishIds, loadIngredientIds } from '@/lib/utils/dishes';
+import { loadDishIds, loadIngredientIds, estVendableAuMenu } from '@/lib/utils/dishes';
 import { lireMontant } from '@/lib/utils/nombres';
 import { useRealtimeRefresh } from '@/lib/hooks/useRealtimeRefresh';
 import type { Product } from '@/types';
@@ -599,7 +599,7 @@ export function FloorModule({
     const q = search.trim().toLowerCase();
     // Les ingrédients ne sont pas au menu (ils restent dans le Stock) — sauf
     // ceux qui sont aussi des plats.
-    const auMenu = products.filter((p) => !(ingredientIds.has(p.id) && !dishIds.has(p.id)));
+    const auMenu = products.filter((p) => estVendableAuMenu(p, dishIds, ingredientIds));
     const actifs = platsServisAujourdhui(auMenu, menuDuJour);
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!q) return actifs;
