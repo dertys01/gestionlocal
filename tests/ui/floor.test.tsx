@@ -934,4 +934,21 @@ describe('FloorModule — transfert et fusion', () => {
       }),
     );
   });
+
+  it('enregistre le nombre de couverts de la commande', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByLabelText('Nombre de couverts')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('Nombre de couverts'), { target: { value: '4' } });
+    fireEvent.blur(screen.getByLabelText('Nombre de couverts'));
+
+    await waitFor(() =>
+      expect(updates.some((u) => u.table === 'restaurant_orders' && u.payload.covers === 4)).toBe(true),
+    );
+  });
 });

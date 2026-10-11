@@ -134,6 +134,8 @@ const ORDER = [
   'migration_restaurant_price_trace.sql',
   // Transfert et fusion de tables (salle) : deux gestes de service, atomiques.
   'migration_restaurant_transfer_merge.sql',
+  // Couverts : nombre de clients à table, pour le ticket moyen par couvert.
+  'migration_restaurant_covers.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -4148,6 +4150,37 @@ const ORD_B = 'f0f0f0f0-0000-0000-0000-000000000012';
   let refuseM = false;
   try { await q(`SELECT merge_table_orders('${ORD_A}', '${ORD_A}')`); } catch { refuseM = true; }
   check('27b5. fusionner une commande avec elle-même est refusé', refuseM);
+}
+
+// ─── 27c. Couverts et statistiques restaurant ─────────────────────────────
+console.log('\n▸ Restaurant — couverts');
+
+{
+  // La contrainte des couverts : ni 0, ni au-delà de 200.
+  let refuse0 = false;
+  let refuse201 = false;
+  try { await q(`UPDATE restaurant_orders SET covers=0 WHERE id='${ORD_A}'`); } catch { refuse0 = true; }
+  try { await q(`UPDATE restaurant_orders SET covers=201 WHERE id='${ORD_A}'`); } catch { refuse201 = true; }
+  await q(`UPDATE restaurant_orders SET covers=3 WHERE id='${ORD_A}'`);
+  const ok = (await q(`SELECT covers FROM restaurant_orders WHERE id='${ORD_A}'`)).rows[0].covers;
+  check('27c1. un nombre de couverts hors bornes est refusé', refuse0 && refuse201,
+    `0:${refuse0} 201:${refuse201}`);
+  check('27c2. un nombre de couverts valide est accepté', Number(ok) === 3, `covers : ${ok}`);
+}
+
+{
+  // get_restaurant_stats est appelable sous RLS (rôle authenticated) : la
+  // fonction existe, est accordée, et répond une ligne.
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  try {
+    const r = (await q(`SELECT * FROM get_restaurant_stats(current_date, current_date, 'Africa/Porto-Novo')`)).rows[0];
+    check('27c3. get_restaurant_stats répond sous RLS', r !== undefined && r.covers !== undefined,
+      `ligne : ${JSON.stringify(r)}`);
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

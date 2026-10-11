@@ -10,7 +10,7 @@
 --    MANQUANTE    = fonction absente de la base
 --    EN PLUS      = fonction présente en base mais pas dans le dépôt
 --
---  60 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
+--  61 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
 -- ============================================================================
 WITH expect(sig, brut_md5, code_md5) AS (
   VALUES
@@ -44,6 +44,7 @@ WITH expect(sig, brut_md5, code_md5) AS (
     ('get_cash_flow(date,date)', 'd10976d2751a09b723cf67184725b566', '35094efd447bccb61360005a3876c9ca'),
     ('get_customer_debts()', '1167942d7e174732e05ba3854db67b1a', 'cbf003dd943e7232899d57267a5412ff'),
     ('get_product_profitability()', '3c326bb6148f64e6b04a147c9af1de34', '5fcbcc2842acd55de605b58ab8f4e1f1'),
+    ('get_restaurant_stats(date,date,text)', '5b0a1d5685e80af68528376ee3caed09', '054cd6e9f6098fccda819c1017299e9f'),
     ('get_sales_summary(date,date,text)', 'b20ea71234701f0c5cf9c570040027b2', '874d04e131374a05e6e53a23fa2a78bf'),
     ('get_top_products(date,date,text,integer)', '03bcc22bb85b632d90912b919ad92c0d', '7487786d4255660fe52e807dc79f60b1'),
     ('get_units_sold_since(integer)', '8f74000cae984ddf44cf1a6a78ffe3e2', '6b45edfae71cd3b4be3816ad3c959550'),

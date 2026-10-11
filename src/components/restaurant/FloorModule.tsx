@@ -18,6 +18,7 @@ import { printKitchenTicket } from '@/lib/utils/kitchen';
 import { platsServisAujourdhui } from '@/lib/utils/menu';
 import { loadDishIds, loadIngredientIds, estVendableAuMenu } from '@/lib/utils/dishes';
 import { lireMontant } from '@/lib/utils/nombres';
+import { localTimeZone, todayISO } from '@/lib/utils/period';
 import { useRealtimeRefresh } from '@/lib/hooks/useRealtimeRefresh';
 import type { Product } from '@/types';
 
@@ -152,6 +153,10 @@ export function FloorModule({
   const [ouverte, setOuverte] = useState<{ tableId: string; nom: string; client: string | null } | null>(null);
   // Panneau « Déplacer / Fusionner » ouvert sous l'en-tête de la commande.
   const [actionTable, setActionTable] = useState<'transfer' | 'merge' | null>(null);
+  // Couverts (nombre de clients) de la commande ouverte, saisi au service.
+  const [covers, setCovers] = useState('');
+  // Résumé du jour : couverts, additions, CA → ticket moyen par couvert.
+  const [stats, setStats] = useState<{ covers: number; additions: number; revenue: number } | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [linesLoading, setLinesLoading] = useState(false);
   // Numéro de la dernière requête de lignes : ouvrir Table A puis Table B sans
@@ -461,6 +466,43 @@ export function FloorModule({
     await Promise.all([loadTables(), loadLines(orderId)]);
   };
 
+  // Couverts de la commande ouverte : relus à chaque changement de commande.
+  useEffect(() => {
+    const commande = orderId;
+    let annule = false;
+    const t = setTimeout(async () => {
+      if (!commande) { if (!annule) setCovers(''); return; }
+      const { data } = await db.from('restaurant_orders').select('covers').eq('id', commande);
+      if (annule) return;
+      const row = (Array.isArray(data) ? data[0] : data) as { covers?: number | null } | null;
+      setCovers(row?.covers != null ? String(row.covers) : '');
+    }, 0);
+    return () => { annule = true; clearTimeout(t); };
+  }, [orderId, db]);
+
+  /** Enregistre le nombre de couverts de la commande ouverte. */
+  const enregistrerCovers = async () => {
+    if (!orderId) return;
+    const brut = covers.trim();
+    const n = brut === '' ? null : Math.max(1, Math.floor(lireMontant(brut) ?? 0));
+    const { error: err } = await db.from('restaurant_orders').update({ covers: n }).eq('id', orderId);
+    if (err) setError(err.message);
+  };
+
+  // Couverts / additions / CA du jour → ticket moyen par couvert.
+  const loadStats = useCallback(async () => {
+    const jour = todayISO();
+    const { data } = await db.rpc('get_restaurant_stats', { p_from: jour, p_to: jour, p_tz: localTimeZone() });
+    const r = (Array.isArray(data) ? data[0] : data) as { covers?: number; additions?: number; revenue?: number } | null;
+    if (r && typeof r === 'object') {
+      setStats({ covers: Number(r.covers ?? 0), additions: Number(r.additions ?? 0), revenue: Number(r.revenue ?? 0) });
+    }
+  }, [db]);
+  useEffect(() => {
+    const t = setTimeout(() => { void loadStats(); }, 0);
+    return () => clearTimeout(t);
+  }, [loadStats]);
+
   const addLine = async (product: Product) => {
     if (!orderId) return;
     // Même règle que la caisse : un produit sans recette et à stock 0 n'est pas
@@ -762,6 +804,7 @@ export function FloorModule({
     setCreditPhone('');
     setCreditAdvance('');
     await loadTables();
+    void loadStats();
   };
 
   const sendToKitchen = async () => {
@@ -888,6 +931,18 @@ export function FloorModule({
     <div className="space-y-4">
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      {/* Résumé du jour : couverts, additions, CA, ticket moyen par couvert. */}
+      {stats && stats.additions > 0 && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span><strong>{stats.covers}</strong> couvert{stats.covers > 1 ? 's' : ''}</span>
+          <span>· {stats.additions} addition{stats.additions > 1 ? 's' : ''}</span>
+          <span>· CA {formatCFA(stats.revenue)}</span>
+          {stats.covers > 0 && (
+            <span className="font-medium text-slate-700">· {formatCFA(stats.revenue / stats.covers)} par couvert</span>
+          )}
+        </div>
       )}
 
       {/* La salle est installée : on doit pouvoir y ajouter une table, pas
@@ -1152,6 +1207,24 @@ export function FloorModule({
                     .map((p) => <option key={p.id} value={p.id}>À emporter{p.customer_name ? ` · ${p.customer_name}` : ''}</option>)}
                 </select>
               )}
+            </div>
+
+            {/* Couverts : nombre de clients à table, pour le ticket moyen. */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="covers" className="text-xs font-medium text-slate-600">Couverts</label>
+              <input
+                id="covers"
+                type="number"
+                min="1"
+                max="200"
+                inputMode="numeric"
+                value={covers}
+                onChange={(e) => setCovers(e.target.value)}
+                onBlur={enregistrerCovers}
+                placeholder="—"
+                aria-label="Nombre de couverts"
+                className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
 
             {/* Lignes */}
