@@ -855,10 +855,9 @@ export function FloorModule({
       org,
     });
     if (!ok) {
-      // Popup bloquée : on ne marque rien, et on le dit. Le serveur doit
-      // savoir qu'il faut imprimer depuis un autre écran.
-      setError('Le navigateur a bloqué la fenêtre d\'impression. Autorisez les fenêtres pour cet site, puis réessayez.');
-      return;
+      // Popup bloquée : on le dit, mais on envoie QUAND MÊME à l'écran Cuisine.
+      setError("L'impression a été bloquée par le navigateur. La commande est bien envoyée à l'écran Cuisine.");
+      // Pas de `return` : l'écran Cuisine prend le relais même sans papier.
     }
     void sendToKitchen();
   };
