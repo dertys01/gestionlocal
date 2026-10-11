@@ -16,7 +16,7 @@ import { logActivity } from '@/lib/utils/activity';
 import { formatCFA, formatQty } from '@/lib/utils/currency';
 import { printKitchenTicket } from '@/lib/utils/kitchen';
 import { platsServisAujourdhui } from '@/lib/utils/menu';
-import { loadDishIds } from '@/lib/utils/dishes';
+import { loadDishIds, loadIngredientIds } from '@/lib/utils/dishes';
 import { lireMontant } from '@/lib/utils/nombres';
 import { useRealtimeRefresh } from '@/lib/hooks/useRealtimeRefresh';
 import type { Product } from '@/types';
@@ -193,9 +193,13 @@ export function FloorModule({
   // disponibilité vient de ses ingrédients) ; un article sans recette, lui, est
   // borné par son stock. Même règle que la caisse (POSModule).
   const [dishIds, setDishIds] = useState<Set<string>>(() => new Set());
+  // Ingrédients : produits qui composent, pas qui se vendent. Masqués du menu de
+  // la salle (ils restent dans le Stock), sauf s'ils sont aussi des plats.
+  const [ingredientIds, setIngredientIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     let vivant = true;
     void loadDishIds(db).then((ids) => { if (vivant) setDishIds(ids); });
+    void loadIngredientIds(db).then((ids) => { if (vivant) setIngredientIds(ids); });
     return () => { vivant = false; };
   }, [db]);
   /** Un produit est vendable s'il a une recette (plat) ou du stock. */
@@ -593,7 +597,10 @@ export function FloorModule({
    */
   const resultats = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const actifs = platsServisAujourdhui(products, menuDuJour);
+    // Les ingrédients ne sont pas au menu (ils restent dans le Stock) — sauf
+    // ceux qui sont aussi des plats.
+    const auMenu = products.filter((p) => !(ingredientIds.has(p.id) && !dishIds.has(p.id)));
+    const actifs = platsServisAujourdhui(auMenu, menuDuJour);
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!q) return actifs;
     const nq = norm(q);
@@ -611,7 +618,7 @@ export function FloorModule({
       .filter((x): x is { p: Product; rang: number } => x !== null)
       .sort((a, b) => a.rang - b.rang)
       .map((x) => x.p);
-  }, [products, search, menuDuJour]);
+  }, [products, search, menuDuJour, ingredientIds, dishIds]);
 
   // Le supplément des modificateurs compte dans le total affiché : c'est le
   // montant que la table va payer. Il est figé à l'insertion de la ligne, donc

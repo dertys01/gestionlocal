@@ -19,8 +19,9 @@ const { salle, prises, inserts, lignesCommande, modificateurs, updates, dishRows
     lignesCommande: [] as unknown[],
     modificateurs: [] as unknown[],
     updates: [] as Array<{ table: string; id: string; payload: Record<string, unknown> }>,
-    // Lignes renvoyées par recipe_ingredients : quels produits sont des PLATS.
-    dishRows: [] as Array<{ dish_id: string }>,
+    // Lignes renvoyées par recipe_ingredients : quels produits sont des PLATS
+    // (dish_id) et quels produits sont des INGRÉDIENTS (ingredient_id).
+    dishRows: [] as Array<{ dish_id?: string; ingredient_id?: string }>,
   };
 });
 
@@ -843,6 +844,26 @@ describe('FloorModule — disponibilité et remise à zéro', () => {
     fireEvent.click(screen.getByText('Table 2'));
     await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
     expect(screen.queryByText(/Répartir en/)).toBeNull();
+  });
+
+  it('masque les ingrédients du menu de la salle', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    dishRows.length = 0;
+    dishRows.push({ dish_id: 'plat1' }, { ingredient_id: 'ing1' });
+    const catalogue = [
+      { id: 'plat1', name: 'Plat vendable', sku: 'PL', price_buy: 0, price_sell: 2000, stock_qty: 0, min_stock_level: 0, category: 'Plats', unit: 'pce' },
+      { id: 'ing1', name: 'Riz cru (kg)', sku: 'RIZ', price_buy: 500, price_sell: 700, stock_qty: 50, min_stock_level: 5, category: 'Ingrédients', unit: 'pce' },
+    ] as unknown as Product[];
+    render(<FloorModule products={catalogue} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
+
+    // Le plat (avec recette) est au menu ; l'ingrédient n'y est pas.
+    await waitFor(() => expect(screen.getByText('Plat vendable')).toBeInTheDocument());
+    expect(screen.queryByText('Riz cru (kg)')).toBeNull();
   });
 
   it('le libellé « Servi le… » reflète les jours choisis', async () => {

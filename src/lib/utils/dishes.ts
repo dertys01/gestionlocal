@@ -31,8 +31,24 @@ type Fromable = {
 
 /** Identifiants des produits qui sont des plats, pour un tenant donné. */
 export async function loadDishIds(db: Fromable): Promise<Set<string>> {
+  return chargerIds(db, 'dish_id');
+}
+
+/**
+ * Identifiants des produits utilisés comme INGRÉDIENT dans une recette.
+ *
+ * Un ingrédient n'est pas un article de vente : il vit dans le Stock, pas dans
+ * le menu de la caisse ni de la salle. On le masque des surfaces de vente (mais
+ * un produit à la fois plat ET ingrédient reste vendable : on ne masque que les
+ * ingrédients qui ne sont pas aussi des plats — voir les appelants).
+ */
+export async function loadIngredientIds(db: Fromable): Promise<Set<string>> {
+  return chargerIds(db, 'ingredient_id');
+}
+
+async function chargerIds(db: Fromable, colonne: 'dish_id' | 'ingredient_id'): Promise<Set<string>> {
   try {
-    const { data, error } = await db.from('recipe_ingredients').select('dish_id');
+    const { data, error } = await db.from('recipe_ingredients').select(colonne);
 
     if (error) {
       // Un restaurant sans table de recettes n'est pas une erreur : le module
@@ -42,15 +58,14 @@ export async function loadDishIds(db: Fromable): Promise<Set<string>> {
     }
 
     const ids = new Set<string>();
-    for (const row of (data ?? []) as { dish_id: string | null }[]) {
-      if (row.dish_id) ids.add(row.dish_id);
+    for (const row of (data ?? []) as Array<Record<string, string | null>>) {
+      const v = row[colonne];
+      if (v) ids.add(v);
     }
     return ids;
   } catch {
-    // La liste des plats est un CONFORT, pas une condition de vente. Si elle ne
-    // peut pas être lue, la caisse vend quand même — au prix d'un « Rupture de
-    // stock » sur les plats, ce qu'un restaurateur constatera vite. Le pire
-    // serait un rejet non capté qui casse le rendu entier de l'écran.
+    // La liste est un CONFORT, pas une condition de vente. Si elle ne peut pas
+    // être lue, la caisse vend quand même — au pire un ingrédient réapparaît.
     return new Set();
   }
 }

@@ -27,7 +27,7 @@ import { lireMontant } from '@/lib/utils/nombres';
 import { generateWhatsAppReceiptLink } from '@/lib/utils/whatsapp';
 import { logActivity } from '@/lib/utils/activity';
 import { printReceipt } from '@/lib/utils/print';
-import { loadDishIds } from '@/lib/utils/dishes';
+import { loadDishIds, loadIngredientIds } from '@/lib/utils/dishes';
 import { useSupabase } from '@/components/providers/SupabaseProvider';
 import { isFeatureAllowed } from '@/lib/utils/plans';
 import { peutDelivrerFacture } from '@/lib/mecef/gate';
@@ -251,6 +251,14 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     void loadDishIds(supabase).then((ids) => { if (vivant) setDishIds(ids); });
     return () => { vivant = false; };
   }, [supabase]);
+  // Ingrédients : des produits qui servent à composer, pas à vendre. Ils vivent
+  // dans le Stock, pas dans le menu de la caisse.
+  const [ingredientIds, setIngredientIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    let vivant = true;
+    void loadIngredientIds(supabase).then((ids) => { if (vivant) setIngredientIds(ids); });
+    return () => { vivant = false; };
+  }, [supabase]);
 
   /**
    * Un produit est-il vendable ? Un plat l'est toujours : ce sont ses
@@ -432,8 +440,15 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
    * ce que le caissier lisait comme une rupture de stock.
    */
   const disponibles = useMemo(
-    () => products.filter((p) => p.is_active !== false),
-    [products],
+    () =>
+      products.filter(
+        (p) =>
+          p.is_active !== false &&
+          // Un ingrédient (utilisé dans une recette) n'est pas un article de
+          // vente — sauf s'il est AUSSI un plat, auquel cas il reste vendable.
+          !(ingredientIds.has(p.id) && !dishIds.has(p.id)),
+      ),
+    [products, ingredientIds, dishIds],
   );
 
   /**
