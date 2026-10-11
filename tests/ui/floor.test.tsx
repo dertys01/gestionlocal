@@ -1052,3 +1052,21 @@ describe('FloorModule — remises et offerts', () => {
     expect(screen.queryByRole('button', { name: 'Offert' })).toBeNull();
   });
 });
+
+describe('FloorModule — tailles et variantes', () => {
+  it('affiche une taille « demi » comme une remise', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    definirModificateurs({ id: 'm1', product_id: 'p1', name: 'Demi portion', extra_price: -1000, is_required: false });
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/)).toBeInTheDocument());
+    fireEvent.click(screen.getAllByText('Poulet braisé')[0]);
+
+    await waitFor(() => expect(screen.getByText(/Demi portion/)).toBeInTheDocument());
+    // Le supplément négatif s'affiche comme une remise (−1 000 F).
+    expect(screen.getByText(/−1\s000 F/)).toBeInTheDocument();
+  });
+});

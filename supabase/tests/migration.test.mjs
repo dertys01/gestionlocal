@@ -140,6 +140,8 @@ const ORDER = [
   'migration_restaurant_payments.sql',
   // Remises et offerts : remise sur l'addition, ligne offerte (patron/manager).
   'migration_restaurant_discount.sql',
+  // Tailles/variantes : supplément négatif autorisé (une « demi » coûte moins).
+  'migration_restaurant_variants.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -3730,13 +3732,20 @@ await q(`INSERT INTO product_modifiers (id, owner_id, product_id, name, extra_pr
   ('${MOD1}', '${RESTO}', '${RJ}', 'Bien cuit', 0),
   ('${MOD2}', '${RESTO}', '${RJ}', 'Double portion', 1500)`);
 
-// 26a. Un supplément négatif est refusé : « sans lactose » ne rapporte pas.
-let negMod = false;
+// 26a. Un supplément négatif est désormais ACCEPTÉ : c'est une taille « demi »
+// (elle coûte moins). Un montant hors bornes reste refusé.
+let negOk = true;
 try {
   await q(`INSERT INTO product_modifiers (owner_id, product_id, name, extra_price)
-    VALUES ('${RESTO}', '${RJ}', 'Remboursé', -100)`);
-} catch { negMod = true; }
-check('26a. un modificateur à prix négatif est refusé', negMod);
+    VALUES ('${RESTO}', '${RJ}', 'Demi portion', -100)`);
+} catch { negOk = false; }
+check('26a. une taille « demi » (supplément négatif) est acceptée', negOk);
+let tropNeg = false;
+try {
+  await q(`INSERT INTO product_modifiers (owner_id, product_id, name, extra_price)
+    VALUES ('${RESTO}', '${RJ}', 'Trop', -2000000)`);
+} catch { tropNeg = true; }
+check('26a2. un supplément hors bornes est refusé', tropNeg);
 
 // 26b. Le modificateur ENTRE dans le prix facturé : deux doubles portions
 // coûtent 2 × (4 500 + 1 500) = 12 000.
@@ -4309,6 +4318,23 @@ const D_O = 'f0f0f0f0-0000-0000-0000-0000000000f2';
   await e('RESET ROLE');
   await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
   check('27e3. un employé ne peut pas accorder de remise', refuseRemise);
+}
+
+// ─── 27f. Tailles et variantes ────────────────────────────────────────────
+console.log('\n▸ Restaurant — tailles et variantes');
+{
+  const V_P = (await q(`SELECT id FROM products WHERE user_id='${RESTO}' AND sku='REM-1'`)).rows[0].id;
+  await q(`INSERT INTO product_modifiers (owner_id, product_id, name, extra_price)
+    VALUES ('${RESTO}', '${V_P}', 'Demi 27f', -1000)`);
+  const neg = Number((await q(`SELECT extra_price FROM product_modifiers WHERE owner_id='${RESTO}' AND name='Demi 27f'`)).rows[0].extra_price);
+  check('27f1. une taille « demi » (supplément négatif) est acceptée', neg === -1000, `extra : ${neg}`);
+
+  let refuseHorsBornes = false;
+  try {
+    await q(`INSERT INTO product_modifiers (owner_id, product_id, name, extra_price)
+      VALUES ('${RESTO}', '${V_P}', 'Trop', -2000000)`);
+  } catch { refuseHorsBornes = true; }
+  check('27f2. un supplément hors bornes est refusé', refuseHorsBornes);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

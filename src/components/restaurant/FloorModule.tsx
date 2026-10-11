@@ -1866,7 +1866,11 @@ export function FloorModule({
                           }`}
                         >
                           {m.name}
-                          {Number(m.extra_price) > 0 && ` +${formatCFA(m.extra_price)}`}
+                          {Number(m.extra_price) !== 0 && (
+                            Number(m.extra_price) > 0
+                              ? ` +${formatCFA(Number(m.extra_price))}`
+                              : ` −${formatCFA(Math.abs(Number(m.extra_price)))}`
+                          )}
                           {m.is_required && <span className="ml-1 opacity-80">(obligatoire)</span>}
                         </button>
                       ))}
