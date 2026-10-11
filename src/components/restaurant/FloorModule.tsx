@@ -16,6 +16,7 @@ import { logActivity } from '@/lib/utils/activity';
 import { formatCFA, formatQty } from '@/lib/utils/currency';
 import { printKitchenTicket } from '@/lib/utils/kitchen';
 import { platsServisAujourdhui } from '@/lib/utils/menu';
+import { loadDishIds } from '@/lib/utils/dishes';
 import { lireMontant } from '@/lib/utils/nombres';
 import { useRealtimeRefresh } from '@/lib/hooks/useRealtimeRefresh';
 import type { Product } from '@/types';
@@ -134,6 +135,10 @@ export function FloorModule({
   onChanged?: () => void;
 }) {
   const { supabase, ownerId, actorName, user, canManageProducts, isEmployee, org } = useSupabase();
+  // Le client Supabase n'est typé sur aucun schéma : les noms de colonnes ne
+  // sont pas vérifiés. Une petite surface typée vaut mieux que des `any`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
 
   const [tables, setTables] = useState<TableRow[]>([]);
   const [prises, setPrises] = useState<TakeawayRow[]>([]);
@@ -175,16 +180,26 @@ export function FloorModule({
   // catalogue. Un restaurant de 200 plats ne doit pas envoyer 200 lignes de
   // modificateurs pour en afficher trois.
   const [modifiers, setModifiers] = useState<Modifier[]>([]);
+  // Vrai pendant le chargement des options du plat sélectionné : évite d'afficher
+  // « Aucune option » une fraction de seconde avant que les options n'arrivent
+  // (le serveur croyait alors que le plat n'avait pas d'options).
+  const [modifiersLoading, setModifiersLoading] = useState(false);
   const [modSelection, setModSelection] = useState('');
   const [platChoisi, setPlatChoisi] = useState<Product | null>(null);
   // Carte du jour : un restaurant ne sert pas le poisson le mardi. Sans ce
   // filtre, la commande propose des plats que la cuisine ne cuisine pas.
   const [menuDuJour, setMenuDuJour] = useState(true);
-
-  // Le client Supabase n'est typé sur aucun schéma : les noms de colonnes ne
-  // sont pas vérifiés. Une petite surface typée vaut mieux que des `any`.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  // Plats = produits AVEC recette. Un plat se vend sans stock propre (sa
+  // disponibilité vient de ses ingrédients) ; un article sans recette, lui, est
+  // borné par son stock. Même règle que la caisse (POSModule).
+  const [dishIds, setDishIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    let vivant = true;
+    void loadDishIds(db).then((ids) => { if (vivant) setDishIds(ids); });
+    return () => { vivant = false; };
+  }, [db]);
+  /** Un produit est vendable s'il a une recette (plat) ou du stock. */
+  const vendable = (p: Product) => dishIds.has(p.id) || Number(p.stock_qty) > 0;
 
   /**
    * Remet la saisie d'ajout à zéro (plat, option, quantité, note, recherche).
@@ -200,6 +215,16 @@ export function FloorModule({
     setQty('');
     setNote('');
     setSearch('');
+    // La CLÔTURE repart de zéro elle aussi : le partage d'addition, le moyen de
+    // paiement et le pourboire de la commande précédente ne doivent pas
+    // s'appliquer à la suivante. Sans ça, une table « partagée en 2 » laissait
+    // un reçu « 2 parts » sur la commande suivante (jamais partagée).
+    setSplitOpen(false);
+    setSplitCount(1);
+    setPayment('cash');
+    setCreditPhone('');
+    setCreditAdvance('');
+    setTip(0);
   };
 
   // « 42 min » doit avancer tout seul : sans ce tic, l'écart de service ne
@@ -274,7 +299,8 @@ export function FloorModule({
     const plat = platChoisi;
     let annule = false;
     const t = setTimeout(async () => {
-      if (!plat) { setModifiers([]); return; }
+      if (!plat) { setModifiers([]); setModifiersLoading(false); return; }
+      setModifiersLoading(true);
       const { data } = await db
         .from('product_modifiers')
         .select('id, product_id, name, extra_price, is_required')
@@ -284,6 +310,7 @@ export function FloorModule({
       // précédent sous le titre du suivant.
       if (annule) return;
       setModifiers((data ?? []) as Modifier[]);
+      setModifiersLoading(false);
     }, 0);
     return () => { annule = true; clearTimeout(t); };
   }, [platChoisi, db]);
@@ -367,6 +394,8 @@ export function FloorModule({
   // maquis, et le plus simple quand la salle est pleine.
   const openTakeaway = async () => {
     if (!ownerId) return;
+    // La clôture et la saisie de la commande précédente ne doivent pas suivre.
+    viderSaisie();
     setBusy(true);
     setError('');
     const { data, error: err } = await db
@@ -389,6 +418,15 @@ export function FloorModule({
 
   const addLine = async (product: Product) => {
     if (!orderId) return;
+    // Même règle que la caisse : un produit sans recette et à stock 0 n'est pas
+    // vendable. On le refuse ICI, à l'ajout — sinon l'erreur n'arrivait qu'à
+    // l'encaissement, après avoir servi le client.
+    if (!vendable(product)) {
+      setError(
+        `« ${product.name} » est en rupture de stock. Réapprovisionnez-le, ou donnez-lui une recette (onglet Recettes).`,
+      );
+      return;
+    }
     // Un champ quantité vide vaut 1 — le serveur tape rarement la quantité.
     // lireMontant('') rend 0 (zéro est une quantité valide ailleurs), donc le
     // cas du champ vide doit être traité avant l'appel.
@@ -671,7 +709,7 @@ export function FloorModule({
     // Le partage et le moyen de paiement ne doivent pas survivre à la table :
     // sinon l'addition SUIVANTE partait en 3 parts (jamais demandé) et en MoMo
     // (choix de l'autre table). La commande précédente les a consommés.
-    setSplitCount(2);
+    setSplitCount(1);
     setPayment('cash');
     setCreditPhone('');
     setCreditAdvance('');
@@ -1256,7 +1294,17 @@ export function FloorModule({
       {peutReglerCarte && platChoisi && (
         <div className="rounded-lg border border-slate-200 p-3 space-y-2">
           <p className="text-xs font-medium text-slate-700">
-            Servi le… <span className="text-slate-500">(tous les jours par défaut)</span>
+            Servi le…{' '}
+            <span className="text-slate-500">
+              {(() => {
+                const jours = (platChoisi as { menu_days?: number[] | null }).menu_days ?? null;
+                // Reflète l'état réel : « tous les jours » ou la liste des jours
+                // cochés. Un titre figé sur « tous les jours par défaut » mentait
+                // dès qu'on décochait un jour.
+                if (jours === null) return 'tous les jours';
+                return JOURS.filter((j) => jours.includes(j.valeur)).map((j) => j.court).join(' · ');
+              })()}
+            </span>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {JOURS.map((j) => {
@@ -1379,30 +1427,44 @@ export function FloorModule({
                 </p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  {resultats.map((p) => (
-                    <button
-                      key={p.id}
-                      // Un premier clic sélectionne le plat et charge ses
-                      // options ; un second l'ajoute. Ajouter d'emblée
-                      // donnerait une ligne sans cuisson — le serveur
-                      // corrigerait à la main, et le ticket cuisine serait faux.
-                      onClick={() => {
-                        if (platChoisi?.id === p.id) { void addLine(p); return; }
-                        setPlatChoisi(p);
-                        setModSelection('');
-                      }}
-                      disabled={busy}
-                      aria-pressed={platChoisi?.id === p.id}
-                      className={`rounded-lg border px-2 py-2 text-left disabled:opacity-60 ${
-                        platChoisi?.id === p.id
-                          ? 'border-indigo-400 bg-indigo-50'
-                          : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'
-                      }`}
-                    >
-                      <span className="block text-xs font-medium text-slate-800 truncate">{p.name}</span>
-                      <span className="block text-xs text-indigo-600">{formatCFA(p.price_sell)}</span>
-                    </button>
-                  ))}
+                  {resultats.map((p) => {
+                    const v = vendable(p);
+                    return (
+                      <button
+                        key={p.id}
+                        // Un premier clic sélectionne le plat et charge ses
+                        // options ; un second l'ajoute. Ajouter d'emblée
+                        // donnerait une ligne sans cuisson — le serveur
+                        // corrigerait à la main, et le ticket cuisine serait faux.
+                        onClick={() => {
+                          // Rupture : on le dit tout de suite, au lieu de laisser
+                          // composer la commande puis échouer à l'encaissement.
+                          if (!v) {
+                            setError(`« ${p.name} » est en rupture de stock. Réapprovisionnez-le, ou donnez-lui une recette (onglet Recettes).`);
+                            return;
+                          }
+                          if (platChoisi?.id === p.id) { void addLine(p); return; }
+                          setPlatChoisi(p);
+                          setModSelection('');
+                        }}
+                        disabled={busy}
+                        aria-pressed={platChoisi?.id === p.id}
+                        aria-disabled={!v || undefined}
+                        className={`rounded-lg border px-2 py-2 text-left disabled:opacity-60 ${
+                          platChoisi?.id === p.id
+                            ? 'border-indigo-400 bg-indigo-50'
+                            : v
+                              ? 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'
+                              : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <span className={`block text-xs font-medium truncate ${v ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.name}</span>
+                        <span className={`block text-xs ${v ? 'text-indigo-600' : 'text-red-500 font-medium'}`}>
+                          {v ? formatCFA(p.price_sell) : 'Rupture de stock'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -1413,7 +1475,9 @@ export function FloorModule({
                     {platChoisi.name}
                   </p>
 
-                  {modifiers.length === 0 ? (
+                  {modifiersLoading ? (
+                    <p className="text-xs text-slate-500">Chargement des options…</p>
+                  ) : modifiers.length === 0 ? (
                     <p className="text-xs text-slate-500">
                       Aucune option pour ce plat.
                     </p>

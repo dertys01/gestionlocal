@@ -10,7 +10,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
  * Sprint 14 écrira dans `sales`.
  */
 
-const { salle, prises, inserts, lignesCommande, modificateurs, updates } = vi.hoisted(() => {
+const { salle, prises, inserts, lignesCommande, modificateurs, updates, dishRows } = vi.hoisted(() => {
   const inserts: Array<Record<string, unknown>> = [];
   return {
     salle: [] as unknown[],
@@ -19,6 +19,8 @@ const { salle, prises, inserts, lignesCommande, modificateurs, updates } = vi.ho
     lignesCommande: [] as unknown[],
     modificateurs: [] as unknown[],
     updates: [] as Array<{ table: string; id: string; payload: Record<string, unknown> }>,
+    // Lignes renvoyées par recipe_ingredients : quels produits sont des PLATS.
+    dishRows: [] as Array<{ dish_id: string }>,
   };
 });
 
@@ -73,7 +75,9 @@ const supabase = {
           ? chaine(modificateurs, table)
           : table === 'restaurant_orders'
             ? chaine(prises, table)
-            : chaine({ id: 'x' }, table),
+            : table === 'recipe_ingredients'
+              ? chaine(dishRows, table)
+              : chaine({ id: 'x' }, table),
   rpc: vi.fn(async (fn: string, _args?: unknown) => {
     void _args; // le 2ᵉ argument typé permet aux tests de lire les paramètres
     rpcResultats.push(fn);
@@ -775,5 +779,90 @@ fireEvent.click(screen.getAllByText('Poulet braisé')[0]);
 
     await waitFor(() => expect(screen.getByText(/numéro de téléphone est requis/i)).toBeInTheDocument());
     expect(supabase.rpc.mock.calls.some(([fn]) => fn === 'close_table_order')).toBe(false);
+  });
+});
+
+describe('FloorModule — disponibilité et remise à zéro', () => {
+  it('refuse à l’ajout un article sans recette et à stock 0 (pas au paiement)', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    dishRows.length = 0; // aucun plat : « Spaghetti » est un article
+    const catalogue = [
+      { id: 'z1', name: 'Spaghetti', sku: 'SPA', price_buy: 0, price_sell: 1500, stock_qty: 0, min_stock_level: 0, category: 'Plats', unit: 'pce' },
+    ] as unknown as Product[];
+    render(<FloorModule products={catalogue} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
+
+    // La tuile annonce la rupture.
+    await waitFor(() => expect(screen.getAllByText('Rupture de stock').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByText('Spaghetti'));
+    await waitFor(() => expect(screen.getByText(/Réapprovisionnez-le/)).toBeInTheDocument());
+    // Aucune ligne de commande n'a été écrite.
+    expect(inserts.filter((i) => 'product_id' in i)).toHaveLength(0);
+  });
+
+  it('un PLAT (avec recette) à stock 0 reste vendable', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    dishRows.length = 0;
+    dishRows.push({ dish_id: 'z2' });
+    const catalogue = [
+      { id: 'z2', name: 'Attiéké poisson', sku: 'ATT', price_buy: 0, price_sell: 2000, stock_qty: 0, min_stock_level: 0, category: 'Plats', unit: 'pce' },
+    ] as unknown as Product[];
+    render(<FloorModule products={catalogue} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
+
+    await waitFor(() => expect(screen.getByText('Attiéké poisson')).toBeInTheDocument());
+    expect(screen.queryByText('Rupture de stock')).toBeNull();
+    // Sélectionnable : le panneau d'ajout s'ouvre.
+    fireEvent.click(screen.getByText('Attiéké poisson'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Ajouter à la commande/ })).toBeInTheDocument());
+  });
+
+  it('changer de table remet le partage d’addition à zéro', async () => {
+    definirSalle(
+      table({ id: 't1', name: 'Table 1', order_id: 'cmd-1', status: 'open' }),
+      table({ id: 't2', name: 'Table 2' }),
+    );
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getAllByText(/Poulet braisé/).length).toBeGreaterThan(1));
+    fireEvent.click(screen.getByText(/Partager l'addition/i));
+    await waitFor(() => expect(screen.getByText(/Répartir en/)).toBeInTheDocument());
+
+    // Autre table : le partage de la précédente ne doit pas suivre.
+    fireEvent.click(screen.getByText('Table 2'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
+    expect(screen.queryByText(/Répartir en/)).toBeNull();
+  });
+
+  it('le libellé « Servi le… » reflète les jours choisis', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande();
+    const today = new Date().getDay();
+    const court: Record<number, string> = { 0: 'Dim', 1: 'Lun', 2: 'Mar', 3: 'Mer', 4: 'Jeu', 5: 'Ven', 6: 'Sam' };
+    const catalogue = [
+      { id: 'p9', name: 'Poisson braisé', sku: 'PB', price_buy: 0, price_sell: 3000, stock_qty: 5, min_stock_level: 0, category: 'Plats', unit: 'pce', menu_days: [today] },
+    ] as unknown as Product[];
+    render(<FloorModule products={catalogue} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText(/Fermer le panneau/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Poisson braisé'));
+
+    await waitFor(() => expect(screen.getByText(/Servi le/)).toBeInTheDocument());
+    const titre = screen.getByText(/Servi le/).textContent ?? '';
+    expect(titre).toContain(court[today]);
+    expect(titre).not.toContain('tous les jours');
   });
 });
