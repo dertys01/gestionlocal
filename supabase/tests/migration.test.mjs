@@ -132,6 +132,8 @@ const ORDER = [
   'migration_returns.sql',
   // Traçabilité du prix en salle : list_price figé à l'insertion de la ligne.
   'migration_restaurant_price_trace.sql',
+  // Transfert et fusion de tables (salle) : deux gestes de service, atomiques.
+  'migration_restaurant_transfer_merge.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -4090,6 +4092,62 @@ await canWrite('27h. un caissier ne change pas les jours de service',
   const servi = Number((await q(`SELECT servi_aujourdhui FROM restaurant_menu_today
     WHERE id = '${RJ}'`)).rows[0].servi_aujourdhui);
   check('27i. remettre à null rend le plat servi tous les jours', Boolean(servi) === true);
+}
+
+// ─── 27bis. Restaurant : transfert et fusion de tables ────────────────────
+//
+// Deux gestes du service. Le transfert déplace une commande ouverte vers une
+// table libre ; la fusion verse les lignes d'une commande dans une autre et
+// libère la source. L'index « une seule commande ouverte par table » doit tenir
+// dans les deux cas.
+console.log('\n▸ Restaurant — transfert et fusion de tables');
+
+const TR1 = 'f0f0f0f0-0000-0000-0000-000000000001';
+const TR2 = 'f0f0f0f0-0000-0000-0000-000000000002';
+const TR3 = 'f0f0f0f0-0000-0000-0000-000000000003';
+const ORD_A = 'f0f0f0f0-0000-0000-0000-000000000011';
+const ORD_B = 'f0f0f0f0-0000-0000-0000-000000000012';
+{
+  await q(`INSERT INTO products (user_id, name, sku, price_sell, stock_qty)
+    VALUES ('${RESTO}', 'Plat transfert', 'TRF-1', 1000, 10)`);
+  const PLAT_TR = (await q(`SELECT id FROM products WHERE user_id='${RESTO}' AND sku='TRF-1'`)).rows[0].id;
+
+  await q(`INSERT INTO restaurant_tables (id, owner_id, name, zone, seats) VALUES
+    ('${TR1}', '${RESTO}', 'Transfert 1', 'Test', 4),
+    ('${TR2}', '${RESTO}', 'Transfert 2', 'Test', 4),
+    ('${TR3}', '${RESTO}', 'Transfert 3', 'Test', 4)`);
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id, opened_by) VALUES
+    ('${ORD_A}', '${RESTO}', '${TR1}', '${PATRON}'),
+    ('${ORD_B}', '${RESTO}', '${TR2}', '${PATRON}')`);
+
+  // Transfert vers une table libre.
+  await q(`SELECT transfer_table_order('${ORD_A}', '${TR3}')`);
+  const t3 = (await q(`SELECT table_id FROM restaurant_orders WHERE id='${ORD_A}'`)).rows[0].table_id;
+  check('27b1. le transfert déplace la commande vers la table libre', t3 === TR3, `table : ${t3}`);
+
+  // Transfert vers une table occupée : refusé.
+  let refuseT = false;
+  try { await q(`SELECT transfer_table_order('${ORD_A}', '${TR2}')`); } catch { refuseT = true; }
+  check('27b2. le transfert vers une table occupée est refusé', refuseT);
+
+  // Fusion : les lignes de ORD_B rejoignent ORD_A, ORD_B disparaît.
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price)
+    VALUES ('${ORD_B}', '${PLAT_TR}', 1, 1000)`);
+  const itemsAvant = Number((await q(`SELECT count(*)::int n FROM restaurant_order_items WHERE order_id='${ORD_A}'`)).rows[0].n);
+  await q(`SELECT merge_table_orders('${ORD_B}', '${ORD_A}')`);
+  const resteB = Number((await q(`SELECT count(*)::int n FROM restaurant_orders WHERE id='${ORD_B}'`)).rows[0].n);
+  const itemsApres = Number((await q(`SELECT count(*)::int n FROM restaurant_order_items WHERE order_id='${ORD_A}'`)).rows[0].n);
+  check('27b3. la fusion déplace les lignes et supprime la commande source',
+    resteB === 0 && itemsApres === itemsAvant + 1, `source:${resteB} cible:${itemsApres}/${itemsAvant}`);
+
+  // La table de la source est redevenue libre.
+  const libB = Number((await q(`SELECT count(*)::int n FROM restaurant_orders WHERE table_id='${TR2}' AND status<>'closed'`)).rows[0].n);
+  check('27b4. la table de la commande fusionnée redevient libre', libB === 0);
+
+  // Fusion de soi-même : refusée.
+  let refuseM = false;
+  try { await q(`SELECT merge_table_orders('${ORD_A}', '${ORD_A}')`); } catch { refuseM = true; }
+  check('27b5. fusionner une commande avec elle-même est refusé', refuseM);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

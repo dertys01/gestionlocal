@@ -150,6 +150,8 @@ export function FloorModule({
   // rendu prend toujours la version la plus récente quand elle existe.
   const [orderId, setOrderId] = useState<string | null>(null);
   const [ouverte, setOuverte] = useState<{ tableId: string; nom: string; client: string | null } | null>(null);
+  // Panneau « Déplacer / Fusionner » ouvert sous l'en-tête de la commande.
+  const [actionTable, setActionTable] = useState<'transfer' | 'merge' | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [linesLoading, setLinesLoading] = useState(false);
   // Numéro de la dernière requête de lignes : ouvrir Table A puis Table B sans
@@ -418,6 +420,45 @@ export function FloorModule({
     setOuverte({ tableId: '', nom: 'À emporter', client: clientName.trim() || null });
     setOrderId(data.id);
     await loadTables();
+  };
+
+  /**
+   * Déplacer la commande ouverte vers une table LIBRE.
+   * Le verrou de table est tenu par la fonction SQL (transaction) : pas de
+   * fenêtre où la table serait libre pour tout le monde.
+   */
+  const transferer = async (targetTableId: string) => {
+    if (!orderId || !targetTableId) return;
+    setBusy(true);
+    setError('');
+    const { error: err } = await db.rpc('transfer_table_order', {
+      p_order_id: orderId,
+      p_target_table_id: targetTableId,
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    const t = tables.find((x) => x.id === targetTableId);
+    setActionTable(null);
+    if (t) setOuverte({ tableId: t.id, nom: t.name, client: tableOuverte?.customer_name ?? null });
+    await loadTables();
+  };
+
+  /**
+   * Fusionner une AUTRE commande ouverte dans celle-ci : ses lignes rejoignent
+   * la commande courante, et sa table redevient libre.
+   */
+  const fusionner = async (sourceOrderId: string) => {
+    if (!orderId || !sourceOrderId) return;
+    setBusy(true);
+    setError('');
+    const { error: err } = await db.rpc('merge_table_orders', {
+      p_source_order_id: sourceOrderId,
+      p_target_order_id: orderId,
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setActionTable(null);
+    await Promise.all([loadTables(), loadLines(orderId)]);
   };
 
   const addLine = async (product: Product) => {
@@ -1054,10 +1095,63 @@ export function FloorModule({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => { setOrderId(null); setOuverte(null); setLines([]); viderSaisie(); }}
+                onClick={() => { setOrderId(null); setOuverte(null); setLines([]); viderSaisie(); setActionTable(null); }}
               >
                 Fermer le panneau
               </Button>
+            </div>
+
+            {/* Déplacer / fusionner : deux gestes du service en salle. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {tableOuverte.id !== '' && (
+                <button
+                  type="button"
+                  onClick={() => setActionTable(actionTable === 'transfer' ? null : 'transfer')}
+                  disabled={busy}
+                  className="text-xs font-medium text-slate-600 hover:text-indigo-600 underline disabled:opacity-50"
+                >
+                  Déplacer
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActionTable(actionTable === 'merge' ? null : 'merge')}
+                disabled={busy}
+                className="text-xs font-medium text-slate-600 hover:text-indigo-600 underline disabled:opacity-50"
+              >
+                Fusionner
+              </button>
+              {actionTable === 'transfer' && (
+                <select
+                  aria-label="Déplacer vers la table"
+                  defaultValue=""
+                  disabled={busy}
+                  onChange={(e) => { if (e.target.value) void transferer(e.target.value); }}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value="">Choisir une table libre…</option>
+                  {tables
+                    .filter((t) => !t.order_id && t.id !== tableOuverte.id)
+                    .map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              )}
+              {actionTable === 'merge' && (
+                <select
+                  aria-label="Fusionner une autre commande"
+                  defaultValue=""
+                  disabled={busy}
+                  onChange={(e) => { if (e.target.value) void fusionner(e.target.value); }}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value="">Fusionner une autre commande…</option>
+                  {tables
+                    .filter((t) => t.order_id && t.order_id !== orderId)
+                    .map((t) => <option key={t.order_id as string} value={t.order_id as string}>{t.name}</option>)}
+                  {prises
+                    .filter((p) => p.id !== orderId)
+                    .map((p) => <option key={p.id} value={p.id}>À emporter{p.customer_name ? ` · ${p.customer_name}` : ''}</option>)}
+                </select>
+              )}
             </div>
 
             {/* Lignes */}

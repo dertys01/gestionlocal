@@ -10,7 +10,7 @@
 --    MANQUANTE    = fonction absente de la base
 --    EN PLUS      = fonction présente en base mais pas dans le dépôt
 --
---  58 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
+--  60 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
 -- ============================================================================
 WITH expect(sig, brut_md5, code_md5) AS (
   VALUES
@@ -48,6 +48,7 @@ WITH expect(sig, brut_md5, code_md5) AS (
     ('get_top_products(date,date,text,integer)', '03bcc22bb85b632d90912b919ad92c0d', '7487786d4255660fe52e807dc79f60b1'),
     ('get_units_sold_since(integer)', '8f74000cae984ddf44cf1a6a78ffe3e2', '6b45edfae71cd3b4be3816ad3c959550'),
     ('marquer_relance(uuid)', '17d82722d6179dd487dd1ab67d258948', '3fd61fb19fa1f0010e87d02ad48706b5'),
+    ('merge_table_orders(uuid,uuid)', 'e8504e12fdc721d23766cbee27420143', '57b475088295c8c1b52ab6cf81601e12'),
     ('normalize_phone(text)', '560e755f78d2debe862a2814cddae112', '3f8addb8c5e4fbf0ace0ccbceeeda9cc'),
     ('open_cash_session(numeric)', '996128475c5cda3f3db339c96d3b7f82', 'd7c91c30eda660e8de44c21795ff6cb3'),
     ('organizations_reject_plan_change()', '9ee6f5d51d38737a7dc107f3f92caf88', 'feb8216cb154d6953576fe38198dc44a'),
@@ -69,6 +70,7 @@ WITH expect(sig, brut_md5, code_md5) AS (
     ('send_order_items(uuid)', '64dc6cd05843ea786f32e8579966c76f', '9bd93f17cce950d628f5911fc10de731'),
     ('set_beta_slots(integer)', '253f7aa9e61ee16c11f41570f2704ef3', '6ac8fd92fdacfa02c138eccc63564da1'),
     ('start_free_trial()', '00b183213c6ea80e15bdcdf2acd2dbb2', 'e52ae4618f94d46bd1d53ed09ce14c4d'),
+    ('transfer_table_order(uuid,uuid)', '390407452996c4f7c505bce9ef2690ed', '4d2a782d112e10829c3ffceddadb23cb'),
     ('update_org_timestamp()', '9baf00d43cdeb2cd0e55c1de045be21b', 'f019c2a85daf0ed4058b77a7a14664a9'),
     ('update_updated_at()', 'da5ac28a58c8b4bb30209bf0d3d7082c', '8d0d99f0f246f51e6e468e02e03e428b'),
     ('within_plan_history(timestampwithtimezone)', 'c07576f52d7c6e0614cf73e1ed6ae59f', 'd766ce063a6eb49dc4f2a4bb46431f58')

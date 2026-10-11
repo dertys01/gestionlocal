@@ -887,3 +887,51 @@ describe('FloorModule — disponibilité et remise à zéro', () => {
     expect(titre).not.toContain('tous les jours');
   });
 });
+
+describe('FloorModule — transfert et fusion', () => {
+  it('déplace une commande vers une table libre', async () => {
+    definirSalle(
+      table({ id: 't1', name: 'Table 1', order_id: 'cmd-1', status: 'open' }),
+      table({ id: 't2', name: 'Table 2' }),
+    );
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText('Déplacer')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Déplacer'));
+    const select = await screen.findByLabelText('Déplacer vers la table');
+    fireEvent.change(select, { target: { value: 't2' } });
+
+    await waitFor(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith('transfer_table_order', {
+        p_order_id: 'cmd-1', p_target_table_id: 't2',
+      }),
+    );
+  });
+
+  it('fusionne une autre table dans la commande courante', async () => {
+    definirSalle(
+      table({ id: 't1', name: 'Table 1', order_id: 'cmd-1', status: 'open' }),
+      table({ id: 't2', name: 'Table 2', order_id: 'cmd-2', status: 'open' }),
+    );
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    await waitFor(() => expect(screen.getByText('Fusionner')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Fusionner'));
+    const select = await screen.findByLabelText('Fusionner une autre commande');
+    fireEvent.change(select, { target: { value: 'cmd-2' } });
+
+    await waitFor(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith('merge_table_orders', {
+        p_source_order_id: 'cmd-2', p_target_order_id: 'cmd-1',
+      }),
+    );
+  });
+});
