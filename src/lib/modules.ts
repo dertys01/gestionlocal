@@ -48,7 +48,7 @@ const RETAIL_ONLY: Tab[] = ['forecast'];
  * arrivent aux sprints 14 et 15 : la liste existe pour qu'un module de plus
  * soit une ligne, pas une refonte.
  */
-const RESTAURANT_ONLY: Tab[] = ['floor', 'recipes'];
+const RESTAURANT_ONLY: Tab[] = ['floor', 'kitchen', 'recipes'];
 
 export const DOMAIN_MODULES: Record<Domain, Tab[]> = {
   retail: [...COMMUN, ...RETAIL_ONLY],

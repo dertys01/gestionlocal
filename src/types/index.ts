@@ -244,6 +244,7 @@ export type Tab =
   | 'forecast'
   | 'team'
   | 'floor'
+  | 'kitchen'
   | 'recipes'
   | 'settings';
 

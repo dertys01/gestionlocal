@@ -13,6 +13,7 @@ import {
   Menu,
   UtensilsCrossed,
   ChefHat,
+  Flame,
   WifiOff,
 } from 'lucide-react';
 import { LandingPage } from '@/components/marketing/LandingPage';
@@ -26,6 +27,7 @@ import { ForecastModule } from '@/components/forecast/ForecastModule';
 import { FloorModule } from '@/components/restaurant/FloorModule';
 import { RecipesModule } from '@/components/restaurant/RecipesModule';
 import { ReservationsModule } from '@/components/restaurant/ReservationsModule';
+import { KitchenDisplay } from '@/components/restaurant/KitchenDisplay';
 import { TeamModule } from '@/components/team/TeamModule';
 import { ProductForm } from '@/components/products/ProductForm';
 import { RestockModal } from '@/components/products/RestockModal';
@@ -244,6 +246,7 @@ export default function HomePage() {
     // Salle : module restaurant, donc filtré comme les autres. La caisse
     // comptoir reste disponible — un restaurant sert aussi à emporter.
     { key: 'floor',     label: 'Salle',     icon: UtensilsCrossed, locked: false },
+    { key: 'kitchen',   label: 'Cuisine',   icon: Flame,           locked: false },
     { key: 'recipes',   label: 'Recettes',  icon: ChefHat,         locked: false },
     { key: 'team',      label: 'Équipe',     icon: Users,           locked: false },
   ];
@@ -444,6 +447,13 @@ export default function HomePage() {
                   (Sprint 14), donc aucun rafraîchissement des produits ici. */}
               <FloorModule products={products} onChanged={fetchProducts} />
               <ReservationsModule />
+            </div>
+          )}
+
+          {tab === 'kitchen' && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-slate-800">Cuisine</h2>
+              <KitchenDisplay products={products} />
             </div>
           )}
 
