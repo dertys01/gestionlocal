@@ -54,7 +54,7 @@ const ligne = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   h.state.items = [ligne()];
-  h.state.orders = [{ id: 'o1', table_id: 't1', customer_name: null }];
+  h.state.orders = [{ id: 'o1', table_id: 't1', customer_name: null, status: 'open' }];
   h.state.tables = [{ id: 't1', name: 'Table 3' }];
   h.state.updates = [];
 });
@@ -92,12 +92,28 @@ describe('KitchenDisplay', () => {
       ligne({ id: 'i2', order_id: 'o2', product_id: 'p1', quantity: 1, modifier: null, note: null }),
     ];
     h.state.orders = [
-      { id: 'o1', table_id: 't1', customer_name: null },
-      { id: 'o2', table_id: null, customer_name: 'M. Kponou' },
+      { id: 'o1', table_id: 't1', customer_name: null, status: 'open' },
+      { id: 'o2', table_id: null, customer_name: 'M. Kponou', status: 'open' },
     ];
     render(<KitchenDisplay products={PRODUITS} />);
 
     await waitFor(() => expect(screen.getByText('Table 3')).toBeInTheDocument());
     expect(screen.getByText(/À emporter · M. Kponou/)).toBeInTheDocument();
+  });
+
+  it('n’affiche pas les lignes d’une commande clôturée', async () => {
+    h.state.items = [
+      ligne({ id: 'i1', order_id: 'o1' }),
+      ligne({ id: 'i2', order_id: 'o2', product_id: 'p1', modifier: null, note: null }),
+    ];
+    h.state.orders = [
+      { id: 'o1', table_id: 't1', customer_name: null, status: 'open' },
+      { id: 'o2', table_id: 't2', customer_name: null, status: 'closed' },
+    ];
+    h.state.tables = [{ id: 't1', name: 'Table 3' }, { id: 't2', name: 'Table 9' }];
+    render(<KitchenDisplay products={PRODUITS} />);
+
+    await waitFor(() => expect(screen.getByText('Table 3')).toBeInTheDocument());
+    expect(screen.queryByText('Table 9')).toBeNull();
   });
 });

@@ -74,11 +74,11 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
       }>;
       const orderIds = [...new Set(list.map((l) => l.order_id))];
 
-      let ords: Array<{ id: string; table_id: string | null; customer_name: string | null }> = [];
+      let ords: Array<{ id: string; table_id: string | null; customer_name: string | null; status: string }> = [];
       let tbls: Array<{ id: string; name: string }> = [];
       if (orderIds.length > 0) {
         const { data: o } = await supabase
-          .from('restaurant_orders').select('id, table_id, customer_name').in('id', orderIds);
+          .from('restaurant_orders').select('id, table_id, customer_name, status').in('id', orderIds);
         ords = (o ?? []) as typeof ords;
         const tableIds = [...new Set(ords.map((x) => x.table_id).filter((x): x is string => !!x))];
         if (tableIds.length > 0) {
@@ -91,7 +91,11 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
       const parOrdre = new Map(ords.map((o) => [o.id, o]));
       const parTable = new Map(tbls.map((t) => [t.id, t.name]));
 
-      setLignes(list.map((l) => {
+      // Une commande clôturée n'est plus en cuisine : ses lignes restent en
+      // « envoyé » en base, mais on ne les montre pas — et la RLS refuse de les
+      // modifier (policy sur commande ouverte), donc « Prêt » échouait en
+      // silence.
+      setLignes(list.filter((l) => parOrdre.get(l.order_id)?.status !== 'closed').map((l) => {
         const o = parOrdre.get(l.order_id);
         return {
           id: l.id,
