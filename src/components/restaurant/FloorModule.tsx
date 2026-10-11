@@ -55,6 +55,8 @@ interface OrderLine {
   modifier: string | null;
   note: string | null;
   status: 'new' | 'sent' | 'served';
+  /** Convive (partage par article). null = non affecté. */
+  split_part: number | null;
   name?: string;
 }
 
@@ -288,7 +290,7 @@ export function FloorModule({
     setLinesLoading(true);
     const { data, error: err } = await db
       .from('restaurant_order_items')
-      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, product:products(name)')
+      .select('id, product_id, quantity, unit_price, extra_price, modifier, note, status, split_part, product:products(name)')
       .eq('order_id', id)
       .order('created_at');
     // Une réponse d'une table déjà quittée est ignorée : sinon ses lignes
@@ -487,6 +489,16 @@ export function FloorModule({
     const n = brut === '' ? null : Math.max(1, Math.floor(lireMontant(brut) ?? 0));
     const { error: err } = await db.from('restaurant_orders').update({ covers: n }).eq('id', orderId);
     if (err) setError(err.message);
+  };
+
+  /** Rattache une ligne de commande à un convive (partage par article). */
+  const setLinePart = async (line: OrderLine, part: number) => {
+    setBusy(true);
+    setError('');
+    const { error: err } = await db.from('restaurant_order_items').update({ split_part: part }).eq('id', line.id);
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    if (orderId) await loadLines(orderId);
   };
 
   // Couverts / additions / CA du jour → ticket moyen par couvert.
@@ -711,6 +723,16 @@ export function FloorModule({
     0
   );
 
+  // Totaux par convive (partage par article). Les lignes sans part comptent en P1.
+  const partsTotaux = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const l of lines) {
+      const p = l.split_part ?? 1;
+      m.set(p, (m.get(p) ?? 0) + Number(l.quantity) * (Number(l.unit_price) + Number(l.extra_price ?? 0)));
+    }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [lines]);
+
   // ── Clôture ────────────────────────────────────────────────
   // Fractionner ne multiplie PAS les ventes : trois convives à 12 000 F font
   // une vente de 36 000 F, répartie en 3 parts pour l'affichage. La part de
@@ -722,6 +744,10 @@ export function FloorModule({
   // être rattachable), l'acompte est ce qui est versé à la clôture.
   const [creditPhone, setCreditPhone] = useState('');
   const [creditAdvance, setCreditAdvance] = useState('');
+  // Paiement multiple : plusieurs moyens sur une même addition. Chaque ligne =
+  // un moyen + un montant ; la somme doit égaler l'addition.
+  const [multiPaiement, setMultiPaiement] = useState(false);
+  const [paiements, setPaiements] = useState<Array<{ method: 'cash' | 'momo'; amount: string }>>([]);
   // Pourboire laissé sur la table. Il est enregistré mais HORS du chiffre
   // d'affaires : c'est une manne, pas une recette.
   const [tip, setTip] = useState(0);
@@ -761,6 +787,22 @@ export function FloorModule({
       setError('Un numéro de téléphone est requis pour une addition à crédit.');
       return;
     }
+    // Paiement multiple : la somme des lignes doit égaler l'addition.
+    let paiementsValides: Array<{ method: string; amount: number }> = [];
+    if (multiPaiement) {
+      paiementsValides = paiements
+        .map((x) => ({ method: x.method, amount: lireMontant(x.amount) ?? 0 }))
+        .filter((x) => x.amount > 0);
+      if (paiementsValides.length === 0) {
+        setError('Ajoutez au moins un paiement.');
+        return;
+      }
+      const somme = paiementsValides.reduce((n, x) => n + x.amount, 0);
+      if (Math.abs(somme - totalLignes) > 0.01) {
+        setError(`La somme des paiements (${formatCFA(somme)}) doit égaler l'addition (${formatCFA(totalLignes)}).`);
+        return;
+      }
+    }
     const avance = payment === 'credit' ? (lireMontant(creditAdvance) ?? 0) : 0;
     setClosing(true);
     setError('');
@@ -771,6 +813,7 @@ export function FloorModule({
       p_tip: tip,
       p_client_phone: payment === 'credit' ? creditPhone.trim() : null,
       p_amount_paid: avance,
+      ...(multiPaiement ? { p_payments: paiementsValides } : {}),
     });
     setClosing(false);
     if (err) { setError(err.message); return; }
@@ -803,6 +846,8 @@ export function FloorModule({
     setPayment('cash');
     setCreditPhone('');
     setCreditAdvance('');
+    setMultiPaiement(false);
+    setPaiements([]);
     await loadTables();
     void loadStats();
   };
@@ -1275,6 +1320,18 @@ export function FloorModule({
                         Number(l.quantity) * (Number(l.unit_price) + Number(l.extra_price ?? 0))
                       )}
                     </span>
+                    {/* Partage par article : à quel convive appartient la ligne. */}
+                    <select
+                      aria-label={`Part de ${l.name}`}
+                      value={l.split_part ?? 1}
+                      disabled={busy}
+                      onChange={(e) => void setLinePart(l, Number(e.target.value))}
+                      className="shrink-0 rounded border border-slate-200 bg-white text-xs px-1 py-0.5 text-slate-600"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                        <option key={n} value={n}>P{n}</option>
+                      ))}
+                    </select>
                     {/* Quantité modifiable APRÈS l'ajout — voir setLineQty.
                         type="text" et non "number" : un champ number REJETTE la
                         virgule, il vide la saisie au lieu de la prendre — exactement
@@ -1388,6 +1445,15 @@ export function FloorModule({
                   </div>
                 )}
 
+                {/* Totaux par convive (partage par article). */}
+                {partsTotaux.length > 1 && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600 flex flex-wrap gap-x-3 gap-y-1">
+                    {partsTotaux.map(([p, t]) => (
+                      <span key={p}>P{p} : <strong className="text-slate-800">{formatCFA(t)}</strong></span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Pourboire : laissé sur la table, hors application. On le note pour le
                     savoir, sans l'ajouter au chiffre d'affaires — sinon les
                     rapports mensuels surestimeraient le CA, et les frais
@@ -1409,7 +1475,76 @@ export function FloorModule({
                   </span>
                 </div>
 
+                {/* Paiement multiple : plusieurs moyens sur une même addition. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const suivant = !multiPaiement;
+                    setMultiPaiement(suivant);
+                    if (suivant) {
+                      setPayment('cash');
+                      if (paiements.length === 0) {
+                        setPaiements([
+                          { method: 'cash', amount: String(totalLignes) },
+                          { method: 'momo', amount: '' },
+                        ]);
+                      }
+                    }
+                  }}
+                  aria-pressed={multiPaiement}
+                  className={`text-xs font-medium underline ${multiPaiement ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {multiPaiement ? 'Revenir à un paiement simple' : 'Paiement multiple (plusieurs moyens)'}
+                </button>
+
+                {multiPaiement && (
+                  <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                    {paiements.map((x, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <select
+                          aria-label={`Moyen du paiement ${i + 1}`}
+                          value={x.method}
+                          onChange={(e) => setPaiements((p) => p.map((y, j) => (j === i ? { ...y, method: e.target.value as 'cash' | 'momo' } : y)))}
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                        >
+                          <option value="cash">Espèces</option>
+                          <option value="momo">Mobile Money</option>
+                        </select>
+                        <Input
+                          value={x.amount}
+                          onChange={(e) => setPaiements((p) => p.map((y, j) => (j === i ? { ...y, amount: e.target.value } : y)))}
+                          inputMode="decimal"
+                          placeholder="Montant"
+                          aria-label={`Montant du paiement ${i + 1}`}
+                          className="w-28"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPaiements((p) => p.filter((_, j) => j !== i))}
+                          aria-label={`Retirer le paiement ${i + 1}`}
+                          className="text-slate-400 hover:text-red-500"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setPaiements((p) => [...p, { method: 'cash', amount: '' }])}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+                      >
+                        + Ajouter un moyen
+                      </button>
+                      <span className="text-xs text-slate-500">
+                        {formatCFA(paiements.reduce((n, x) => n + (lireMontant(x.amount) ?? 0), 0))} / {formatCFA(totalLignes)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center gap-2">
+                  {!multiPaiement && (
                   <div className="flex rounded-lg border border-slate-200 overflow-hidden">
                     {(['cash', 'momo', 'credit'] as const).map((m) => (
                       <button
@@ -1424,8 +1559,9 @@ export function FloorModule({
                       </button>
                     ))}
                   </div>
+                  )}
 
-                  {payment === 'credit' && (
+                  {!multiPaiement && payment === 'credit' && (
                     <div className="w-full flex flex-col sm:flex-row gap-2">
                       <Input
                         value={creditPhone}

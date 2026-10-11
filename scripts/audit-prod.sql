@@ -10,7 +10,7 @@
 --    MANQUANTE    = fonction absente de la base
 --    EN PLUS      = fonction présente en base mais pas dans le dépôt
 --
---  61 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
+--  60 fonctions · ordre des sections = APPLY_MIGRATIONS.sql
 -- ============================================================================
 WITH expect(sig, brut_md5, code_md5) AS (
   VALUES
@@ -32,7 +32,6 @@ WITH expect(sig, brut_md5, code_md5) AS (
     ('claim_webhook_event(text,text,text)', '40a1a3cbee1bf96bae5f60debca639fa', '0c164db9340e69ec622cd45bae135cb4'),
     ('close_beta_program()', '28a8854e2d5e4e0ebf74288bfa0a0cae', '5a82cf9f604a045ca4f163abc3cd1650'),
     ('close_cash_session(numeric,text)', 'd1e5c3e2147d0ed81ee5961cd765a92a', '5d4188a21f7075822623e4399cfb9b50'),
-    ('close_table_order(uuid,text,numeric,integer,text,text,numeric)', '0203a702c3229e4d060d929cfb7e1285', '3954e9994a8ec5e873973912f02ebd0a'),
     ('create_purchase_order(uuid,jsonb,text)', '0ecdb36e9b685dae5820226869f2200c', '0bd09e22a9287cd7afd90f08f406f4d7'),
     ('create_sale(jsonb,text,text,text,text)', 'd57c23eaebf5d820bb157f57a6a3f65d', '6e48909dfa5123a80d60795dbbc118dc'),
     ('current_org_plan()', 'ca233084cdc9d653a98bd164a4eae2ac', 'db407b6e27b88cf7f4a0e454971fd30a'),

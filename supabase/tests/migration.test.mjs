@@ -136,6 +136,8 @@ const ORDER = [
   'migration_restaurant_transfer_merge.sql',
   // Couverts : nombre de clients à table, pour le ticket moyen par couvert.
   'migration_restaurant_covers.sql',
+  // Paiement multiple (sale_payments) + partage par article (split_part).
+  'migration_restaurant_payments.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -327,6 +329,11 @@ const DERNIERE_VERSION = [
   // normalize_phone() : migration_credit_fns.sql, rejouée plus haut, réinstalle
   // la version qui ne préfixe que les numéros à 8 chiffres.
   'migration_telephone_benin.sql',
+  // Paiement multiple : DERNIÈRE version de create_sale ('mixed'),
+  // close_table_order (8 args) et get_sales_summary (ventilation par paiement).
+  // DOIT fermer la liste : les migrations de facturation et hors-ligne,
+  // rejouées plus haut, réinstallent les versions sans 'mixed'.
+  'migration_restaurant_payments.sql',
 ];
 
 console.log(`\n▸ Rejouabilité (${REPLAYABLE.length} migrations incrémentales)`);
@@ -4181,6 +4188,76 @@ console.log('\n▸ Restaurant — couverts');
     await e('RESET ROLE');
     await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
   }
+}
+
+// ─── 27d. Paiement multiple et partage par article ────────────────────────
+console.log('\n▸ Restaurant — paiement multiple');
+
+const PM_T = 'f0f0f0f0-0000-0000-0000-0000000000e1';
+const PM_O = 'f0f0f0f0-0000-0000-0000-0000000000e2';
+{
+  await q(`INSERT INTO products (user_id, name, sku, price_sell, stock_qty)
+    VALUES ('${RESTO}', 'Plat multi', 'PM-1', 1000, 10)`);
+  const p = (await q(`SELECT id FROM products WHERE user_id='${RESTO}' AND sku='PM-1'`)).rows[0].id;
+  await q(`INSERT INTO restaurant_tables (id, owner_id, name, zone) VALUES ('${PM_T}', '${RESTO}', 'Multi', 'Test')`);
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id) VALUES ('${PM_O}', '${RESTO}', '${PM_T}')`);
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price, split_part)
+    VALUES ('${PM_O}', '${p}', 8, 1000, 1)`); // total 8 000
+
+  // split_part hors bornes refusé.
+  let refusePart = false;
+  try { await q(`UPDATE restaurant_order_items SET split_part=0 WHERE order_id='${PM_O}'`); } catch { refusePart = true; }
+  check('27d1. une part hors bornes est refusée', refusePart);
+
+  // Paiement multiple : 5 000 espèces + 3 000 MoMo.
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let res;
+  try {
+    res = (await q(`SELECT close_table_order('${PM_O}', 'cash', NULL, 1, NULL, NULL, 0,
+      '[{"method":"cash","amount":5000},{"method":"momo","amount":3000}]'::jsonb) AS r`)).rows[0].r;
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+
+  const sale = (await q(`SELECT payment_method, amount_received, total_amount FROM sales WHERE id='${res.sale_id}'`)).rows[0];
+  check('27d2. un paiement multiple crée une vente « mixed » au total',
+    sale.payment_method === 'mixed' && Number(sale.amount_received) === 8000, JSON.stringify(sale));
+
+  const pay = (await q(`SELECT method, amount FROM sale_payments WHERE sale_id='${res.sale_id}' ORDER BY method`)).rows;
+  check('27d3. les deux paiements sont enregistrés',
+    pay.length === 2 && Number(pay.find((x) => x.method === 'cash').amount) === 5000,
+    JSON.stringify(pay));
+
+  // La ventilation espèces/MoMo suit les paiements.
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let sum;
+  try {
+    sum = (await q(`SELECT cash, momo FROM get_sales_summary(current_date, current_date, 'Africa/Porto-Novo')`)).rows[0];
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+  check('27d4. la ventilation espèces/MoMo suit les paiements',
+    Number(sum.cash) >= 5000 && Number(sum.momo) >= 3000, JSON.stringify(sum));
+
+  // Somme fausse refusée.
+  const PM_O2 = 'f0f0f0f0-0000-0000-0000-0000000000e3';
+  await q(`INSERT INTO restaurant_orders (id, owner_id, table_id) VALUES ('${PM_O2}', '${RESTO}', NULL)`);
+  await q(`INSERT INTO restaurant_order_items (order_id, product_id, quantity, unit_price)
+    VALUES ('${PM_O2}', '${p}', 1, 1000)`);
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let refuseSomme = false;
+  try {
+    await q(`SELECT close_table_order('${PM_O2}', 'cash', NULL, 1, NULL, NULL, 0,
+      '[{"method":"cash","amount":500}]'::jsonb)`);
+  } catch { refuseSomme = true; }
+  await e('RESET ROLE');
+  await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  check('27d5. une somme de paiements fausse est refusée', refuseSomme);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

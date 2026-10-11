@@ -952,3 +952,57 @@ describe('FloorModule — transfert et fusion', () => {
     );
   });
 });
+
+describe('FloorModule — partage par article et paiement multiple', () => {
+  it('rattache une ligne à un convive (partage par article)', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat);
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    const select = await screen.findByLabelText(/Part de Poulet braisé/);
+    fireEvent.change(select, { target: { value: '2' } });
+
+    await waitFor(() =>
+      expect(updates.some((u) => u.table === 'restaurant_order_items' && u.payload.split_part === 2)).toBe(true),
+    );
+  });
+
+  it('encaisse avec plusieurs moyens (paiement multiple)', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat); // 2 × 4 500 = 9 000
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.click(await screen.findByText(/Paiement multiple/));
+
+    fireEvent.change(screen.getByLabelText('Montant du paiement 1'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Montant du paiement 2'), { target: { value: '4000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Encaisser/ }));
+
+    await waitFor(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith('close_table_order', expect.objectContaining({
+        p_order_id: 'cmd-9',
+        p_payments: [{ method: 'cash', amount: 5000 }, { method: 'momo', amount: 4000 }],
+      })),
+    );
+  });
+
+  it('refuse un paiement multiple dont la somme ne fait pas l’addition', async () => {
+    definirSalle(table({ order_id: 'cmd-9', status: 'open' }));
+    definirCommande(plat); // 9 000
+    render(<FloorModule products={produits} />);
+
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Table 1'));
+    fireEvent.click(await screen.findByText(/Paiement multiple/));
+
+    fireEvent.change(screen.getByLabelText('Montant du paiement 1'), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Encaisser/ }));
+
+    await waitFor(() => expect(screen.getByText(/doit égaler l.addition/)).toBeInTheDocument());
+    expect(supabase.rpc.mock.calls.some(([fn]) => fn === 'close_table_order')).toBe(false);
+  });
+});
