@@ -37,7 +37,7 @@ function planAffiche(o: Org): string {
   return o.plan;
 }
 
-const dateFR = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '—');
+const dateFR = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '-');
 
 export default function PlansAdminPage() {
   const { supabase } = useSupabase();

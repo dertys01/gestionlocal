@@ -1336,7 +1336,7 @@ export function FloorModule({
                 value={covers}
                 onChange={(e) => setCovers(e.target.value)}
                 onBlur={enregistrerCovers}
-                placeholder="—"
+                placeholder="-"
                 aria-label="Nombre de couverts"
                 className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -1459,7 +1459,7 @@ export function FloorModule({
                       aria-label={`Retirer ${l.name} de la commande`}
                       className="p-1 text-slate-400 hover:text-red-600 shrink-0"
                     >
-                      ✕
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 ))}

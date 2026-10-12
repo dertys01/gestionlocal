@@ -229,7 +229,7 @@ export function FormulesModule() {
                 <Input
                   value={nom}
                   onChange={(e) => setNom(e.target.value)}
-                  placeholder="Nom — ex: Formule maquis"
+                  placeholder="Ex : Formule maquis"
                   aria-label="Nom de la nouvelle formule"
                 />
                 <div className="flex gap-2">

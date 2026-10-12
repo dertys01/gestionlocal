@@ -304,7 +304,7 @@ export function RecipesModule() {
                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
                   <p className="text-xs text-slate-500">Coût portion</p>
                   <p className="font-semibold text-slate-800 text-sm">
-                    {plat.ingredient_count > 0 ? formatCFA(plat.unit_cost) : '—'}
+                    {plat.ingredient_count > 0 ? formatCFA(plat.unit_cost) : '-'}
                   </p>
                 </div>
                 <div
@@ -318,7 +318,7 @@ export function RecipesModule() {
                   <p className="font-semibold text-slate-800 text-sm">
                     {plat.ingredient_count > 0 && plat.margin_pct !== null
                       ? `${plat.margin_pct} %`
-                      : '—'}
+                      : '-'}
                   </p>
                 </div>
               </div>

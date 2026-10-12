@@ -294,7 +294,7 @@ export function ForecastModule({ onRestock }: { onRestock: () => void }) {
                         <div>
                           <span className="block text-slate-500">Moy. / jour</span>
                           <span className="font-semibold text-slate-700">
-                            {f.avgPerDay > 0 ? f.avgPerDay.toFixed(1) : '—'}
+                            {f.avgPerDay > 0 ? f.avgPerDay.toFixed(1) : '-'}
                           </span>
                         </div>
                       </div>

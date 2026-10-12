@@ -133,7 +133,7 @@ describe('RecipesModule — le coût de revient d\'un plat', () => {
     // Sans recette, il n'y a pas de coût de revient à afficher : le prix
     // d'achat du plat n'est PAS un coût de recette, et le montrer ferait
     // croire à une précision qui n'existe pas. Même la marge s'efface.
-    await waitFor(() => expect(screen.getAllByText('—').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('-').length).toBeGreaterThan(0));
     expect(screen.queryByText('55.6 %')).not.toBeInTheDocument();
     expect(screen.queryByText('2 000 F')).not.toBeInTheDocument();
   });

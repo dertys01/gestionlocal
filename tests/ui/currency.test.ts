@@ -9,9 +9,9 @@ describe('formatCFA', () => {
     expect(n(formatCFA(1500))).toBe('1 500 F');
   });
 
-  it('rend « — » pour un montant non fini (jamais « NaN F »)', () => {
-    expect(formatCFA(NaN)).toBe('—');
-    expect(formatCFA(Infinity)).toBe('—');
+  it('rend « - » pour un montant non fini (jamais « NaN F »)', () => {
+    expect(formatCFA(NaN)).toBe('-');
+    expect(formatCFA(Infinity)).toBe('-');
   });
 });
 

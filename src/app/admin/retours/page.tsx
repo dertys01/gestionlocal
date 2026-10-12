@@ -126,7 +126,7 @@ export default function RetoursAdminPage() {
                     <span>·</span>
                     <span>{r.org_name ?? r.owner_id}</span>
                     <span>·</span>
-                    <span>{r.author_email ?? '—'}</span>
+                    <span>{r.author_email ?? '-'}</span>
                     <span className="ml-auto">{new Date(r.created_at).toLocaleString('fr-FR')}</span>
                   </div>
                   <p className="text-sm text-slate-800 whitespace-pre-wrap">{r.message}</p>

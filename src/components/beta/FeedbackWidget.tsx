@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageCircle, X, Send, Loader2, Bug, Lightbulb, HelpCircle } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, Bug, Lightbulb, HelpCircle, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSupabase } from '@/components/providers/SupabaseProvider';
 
@@ -103,7 +103,7 @@ export function FeedbackWidget({ open, onOpenChange, page }: FeedbackWidgetProps
 
             {envoye ? (
               <div className="p-6 text-center space-y-3">
-                <p className="text-4xl">🙏</p>
+                <Heart className="h-10 w-10 text-indigo-500 mx-auto" />
                 <p className="font-medium text-slate-800">Merci, c&apos;est bien reçu.</p>
                 <p className="text-sm text-slate-500">
                   Votre retour part directement à l&apos;équipe. On revient vers vous si besoin.
@@ -146,7 +146,7 @@ export function FeedbackWidget({ open, onOpenChange, page }: FeedbackWidgetProps
                 />
 
                 <p className="text-xs text-slate-400">
-                  L&apos;onglet, le navigateur et la boutique sont joints automatiquement — vous n&apos;avez
+                  L&apos;onglet, le navigateur et la boutique sont joints automatiquement : vous n&apos;avez
                   rien d&apos;autre à noter.
                 </p>
 

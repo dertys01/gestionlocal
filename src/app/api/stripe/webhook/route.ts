@@ -46,7 +46,7 @@ function subscriptionPeriodEnd(sub: { items?: { data?: Array<{ current_period_en
 type PgResult = { error: { message: string } | null };
 async function must<T extends PgResult>(label: string, pending: PromiseLike<T>): Promise<T> {
   const res = await pending;
-  if (res.error) throw new Error(`${label} — ${res.error.message}`);
+  if (res.error) throw new Error(`${label} : ${res.error.message}`);
   return res;
 }
 

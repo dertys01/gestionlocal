@@ -148,7 +148,7 @@ export function ReservationsModule() {
                 placeholder="Téléphone (facultatif)" aria-label="Téléphone (réservation)" className="sm:w-48 bg-white" />
               <select value={tableId} onChange={(e) => setTableId(e.target.value)} aria-label="Table (facultatif)"
                 className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-                <option value="">— Table (facultatif) —</option>
+                <option value="">Table (facultatif)</option>
                 {tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>

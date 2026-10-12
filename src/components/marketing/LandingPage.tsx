@@ -31,19 +31,19 @@ const CAPTURES = [
     src: '/captures/tableau-du-jour.png',
     alt: "Le tableau du jour : encaissé, nombre de ventes et somme à recouvrer",
     legende: 'Le tableau du jour',
-    detail: "L'encaissé, les ventes et ce qu'il reste à recouvrer, en un écran.",
+    detail: "Le total encaissé, le nombre de ventes et ce qu'il reste à recouvrer, sur un écran.",
   },
   {
     src: '/captures/caisse.png',
     alt: 'Le point de vente : recherche de produit, catégories et panier',
     legende: 'La caisse',
-    detail: 'Un produit se trouve au doigt : recherche, catégories, code-barres.',
+    detail: 'Un produit se trouve en un geste : recherche, catégories, code-barres.',
   },
   {
     src: '/captures/journal.png',
     alt: 'Le journal des ventes du jour avec le chiffre d’affaires',
     legende: 'Le journal des ventes',
-    detail: 'Chaque vente du jour, son mode de paiement, son article.',
+    detail: 'Chaque vente du jour, avec son mode de paiement et son article.',
   },
 ] as const;
 
@@ -52,13 +52,13 @@ const FONCTIONS = [
     icon: ShoppingCart,
     titre: 'Caisse et codes-barres',
     texte:
-      "Encaissez en espèces ou Mobile Money, à crédit aussi. Le reçu part sur WhatsApp en un geste.",
+      "Encaissez en espèces ou par Mobile Money, à crédit aussi. Le reçu part sur WhatsApp en un geste.",
   },
   {
     icon: Handshake,
     titre: 'Dettes clients',
     texte:
-      "Le carnet de dettes : qui doit quoi depuis quand, relance en un clic, versements encaissés au fur et à mesure.",
+      "Le carnet de dettes : qui doit quoi, depuis quand. Relance en un clic, versements encaissés au fur et à mesure.",
   },
   {
     icon: Package,
@@ -70,7 +70,7 @@ const FONCTIONS = [
     icon: BarChart2,
     titre: 'Le chiffre du jour',
     texte:
-      "Journal, rentabilité, prévisions de réapprovisionnement : l'essentiel sur le moment, les rapports selon la formule.",
+      "Journal, rentabilité et prévisions de réapprovisionnement : l'essentiel tout de suite, les rapports selon la formule.",
   },
 ] as const;
 
@@ -145,7 +145,7 @@ export function LandingPage() {
           <p className="mt-5 text-slate-600 text-lg max-w-2xl mx-auto">
             GestionLocal est l&apos;application des commerçants : encaissez au
             comptoir, relevez ce que les clients vous doivent, et sachez à tout
-            moment ce qu&apos;il vous reste en stock — depuis votre téléphone.
+            moment ce qu&apos;il vous reste en stock. Le tout, depuis votre téléphone.
           </p>
           <div className="mt-8 flex justify-center">
             <Appels />
@@ -213,7 +213,7 @@ export function LandingPage() {
               Votre boutique mérite mieux qu&apos;un cahier.
             </h2>
             <p className="mt-3 text-indigo-100">
-              Créez-la en deux minutes, ou posez vos questions sur WhatsApp,
+              Créez-la en deux minutes, ou posez vos questions sur WhatsApp :
               on répond nous-mêmes.
             </p>
             <div className="mt-7 flex justify-center">

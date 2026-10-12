@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Bien démarrer — GestionLocal',
+  title: 'Bien démarrer avec GestionLocal',
   description:
     'Guide de démarrage pour les premiers utilisateurs : créer le compte, choisir son activité, faire sa première vente, inviter un employé et signaler un bug.',
 };
@@ -98,7 +98,7 @@ export default function GuidePage() {
           <p className="text-sm text-amber-800">
             Dans l’application, en bas à droite : le bouton{' '}
             <strong>« Un retour ? »</strong>. Choisissez « Un bug », « Une idée » ou « Une question »,
-            écrivez ce qui s’est passé — l’écran, le navigateur et l’heure sont joints
+            écrivez ce qui s’est passé : l’écran, le navigateur et l’heure sont joints
             automatiquement. C’est ce qui nous permet de corriger vite.
           </p>
           <p className="text-sm text-amber-800">
@@ -118,7 +118,7 @@ export default function GuidePage() {
         </section>
 
         <footer className="text-center text-xs text-slate-400 pb-6">
-          GestionLocal — merci de votre confiance.
+          GestionLocal, merci de votre confiance.
         </footer>
       </div>
     </main>

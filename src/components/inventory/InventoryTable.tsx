@@ -342,7 +342,7 @@ export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, o
                       {p.sku && <div className="text-xs text-slate-500 font-mono">{p.sku}</div>}
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-slate-500">{p.category ?? '—'}</span>
+                      <span className="text-sm text-slate-500">{p.category ?? '-'}</span>
                     </TableCell>
                     <TableCell className="text-right font-semibold text-indigo-600">
                       {formatCFA(p.price_sell)}
@@ -394,7 +394,7 @@ export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, o
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-500">—</span>
+                        <span className="text-xs text-slate-500">-</span>
                       )}
                     </TableCell>
                   </TableRow>

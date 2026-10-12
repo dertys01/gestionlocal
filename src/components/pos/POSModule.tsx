@@ -156,7 +156,7 @@ const CarteProduit = memo(function CarteProduit({
           {formatQty(quantite)}
         </span>
       )}
-      <div className="text-xs text-slate-500 mb-1">{produit.category ?? '—'}</div>
+      <div className="text-xs text-slate-500 mb-1">{produit.category ?? '-'}</div>
       <div className={`min-h-9 font-semibold text-sm leading-tight line-clamp-2 ${vendable ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
         {produit.name}
       </div>
@@ -206,7 +206,7 @@ const LigneProduit = memo(function LigneProduit({
             )}
           </span>
           <span className="min-w-0 truncate text-right text-slate-400">
-            {produit.category ?? '—'}
+            {produit.category ?? '-'}
           </span>
         </div>
       </div>

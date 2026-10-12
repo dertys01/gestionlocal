@@ -174,7 +174,7 @@ export function KitchenDisplay({ products }: { products: Product[] }) {
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500 flex items-center gap-2">
           <ChefHat className="h-4 w-4 text-indigo-600" />
-          Ce qui est en cuisine — la plus ancienne commande en tête.
+          Ce qui est en cuisine : la plus ancienne commande en tête.
         </p>
         <button
           aria-label="Actualiser"

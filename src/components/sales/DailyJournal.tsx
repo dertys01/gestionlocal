@@ -246,7 +246,7 @@ export function DailyJournal() {
               <CardContent className="p-4">
                 <div className="text-xs text-slate-500">Marge brute</div>
                 <div className="mt-1 text-xl font-bold text-slate-800 tabular-nums">
-                  {marge === null ? '—' : formatCFA(marge)}
+                  {marge === null ? '-' : formatCFA(marge)}
                 </div>
                 <div className="truncate text-[11px] text-slate-500">{tauxMarge}</div>
               </CardContent>
@@ -268,7 +268,7 @@ export function DailyJournal() {
               <CardContent className="p-4">
                 <div className="text-xs text-slate-500">Résultat net</div>
                 <div className="mt-1 text-xl font-bold text-slate-800 tabular-nums">
-                  {flow === null ? '—' : formatCFA(Number(flow.net))}
+                  {flow === null ? '-' : formatCFA(Number(flow.net))}
                 </div>
                 <div className="truncate text-[11px] text-slate-500">
                   {flow === null ? '' : 'après charges et coût d’achat'}

@@ -27,7 +27,7 @@ export class FedaPay implements Prestataire {
 
   creerPaiement(): Promise<PaiementCree> {
     return Promise.reject(
-      new Error('FedaPay : appels API non branchés — clés et endpoint à écrire après l’essai sandbox.'),
+      new Error('FedaPay : appels API non branchés : clés et endpoint à écrire après l’essai sandbox.'),
     );
   }
 

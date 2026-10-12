@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <div>
             <p className="font-semibold">Cet écran n&apos;a pas pu s&apos;afficher.</p>
             <p className="text-xs mt-1">
-              Vos données ne sont pas perdues. Réessayez, ou changez d&apos;onglet — le reste de
+              Vos données ne sont pas perdues. Réessayez, ou changez d&apos;onglet : le reste de
               l&apos;application fonctionne.
             </p>
           </div>

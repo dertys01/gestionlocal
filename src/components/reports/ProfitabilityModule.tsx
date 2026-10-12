@@ -279,7 +279,7 @@ export function ProfitabilityModule() {
                           )}
                         </td>
                         <td className="py-2 text-right text-slate-500 tabular-nums">
-                          {Number(r.unit_cost) > 0 ? formatCFA(r.unit_cost) : '—'}
+                          {Number(r.unit_cost) > 0 ? formatCFA(r.unit_cost) : '-'}
                         </td>
                         <td className="py-2 text-right text-slate-500 tabular-nums">
                           {formatCFA(r.unit_price)}
@@ -303,12 +303,12 @@ export function ProfitabilityModule() {
                         <td className={`py-2 text-right tabular-nums font-medium ${
                           isLoss ? 'text-red-600' : 'text-emerald-700'
                         }`}>
-                          {isNoCost ? '—' : formatCFA(r.gross_profit)}
+                          {isNoCost ? '-' : formatCFA(r.gross_profit)}
                         </td>
                         <td className={`py-2 text-right tabular-nums ${
                           isNoCost ? 'text-slate-500' : isLoss ? 'text-red-600' : 'text-emerald-700'
                         }`}>
-                          {pct === null ? '—' : `${pct.toFixed(0)}%`}
+                          {pct === null ? '-' : `${pct.toFixed(0)}%`}
                         </td>
                       </tr>
                     );

@@ -16,7 +16,7 @@ export function formatCFA(amount: number): string {
   // dénominateur, donnée manquante) affichait « NaN F » à l'écran. On rend
   // « — », la convention « inconnu » du reste de l'application — un « 0 F »
   // serait un chiffre plausible mais faux.
-  if (!Number.isFinite(amount)) return '—';
+  if (!Number.isFinite(amount)) return '-';
   return CFA_FORMATTER.format(amount) + ' F';
 }
 

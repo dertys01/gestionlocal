@@ -268,8 +268,8 @@ export function ProductImportModal({ products, onClose, onDone }: ProductImportP
                   <tbody>
                     {resultat.rows.map((r) => (
                       <tr key={r.ligne} className="border-t border-slate-100">
-                        <td className="px-3 py-1.5 text-slate-800">{r.name || '—'}</td>
-                        <td className="px-3 py-1.5 text-slate-500">{r.category ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-slate-800">{r.name || '-'}</td>
+                        <td className="px-3 py-1.5 text-slate-500">{r.category ?? '-'}</td>
                         <td className="px-3 py-1.5 text-right text-slate-600">{formatCFA(r.price_buy)}</td>
                         <td className="px-3 py-1.5 text-right text-slate-600">{formatCFA(r.price_sell)}</td>
                         <td className="px-3 py-1.5">

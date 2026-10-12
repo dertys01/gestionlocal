@@ -124,7 +124,7 @@ export const PLAN_PRICES: Record<Plan, { monthly: number | null; yearly: number 
 export function prixMensuelLabel(plan: Plan): string {
   if (plan === 'free') return PLAN_LABELS.free;
   const m = PLAN_PRICES[plan].monthly;
-  return m === null ? '—' : `${formatCFA(m)} / mois`;
+  return m === null ? '-' : `${formatCFA(m)} / mois`;
 }
 
 /** « … F / an », ou null (gratuit, ou pas d'annuel configuré). */

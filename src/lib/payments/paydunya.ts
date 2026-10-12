@@ -17,7 +17,7 @@ export class PayDunya implements Prestataire {
 
   creerPaiement(): Promise<PaiementCree> {
     return Promise.reject(
-      new Error('PayDunya : appels API non branchés — clés et endpoint à écrire après l’essai sandbox.'),
+      new Error('PayDunya : appels API non branchés : clés et endpoint à écrire après l’essai sandbox.'),
     );
   }
 

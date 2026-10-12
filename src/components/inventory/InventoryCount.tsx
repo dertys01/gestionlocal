@@ -265,7 +265,7 @@ export function InventoryCount({ products, onComplete }: InventoryCountProps) {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-800 text-sm truncate">{entry.product.name}</div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-slate-500">{entry.product.category ?? '—'}</span>
+                    <span className="text-xs text-slate-500">{entry.product.category ?? '-'}</span>
                     <span className="text-xs text-slate-500">Stock système : <strong>{entry.product.stock_qty}</strong></span>
                     {hasDiff && (
                       <Badge className={`text-xs py-0 ${diff! > 0 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700 hover:bg-red-100'}`}>
@@ -282,7 +282,7 @@ export function InventoryCount({ products, onComplete }: InventoryCountProps) {
                     step="any"
                     value={counted}
                     onChange={(e) => setCount(entry.product.id, e.target.value)}
-                    placeholder="—"
+                    placeholder="-"
                     aria-label={`Quantité comptée pour ${entry.product.name}`}
                     className="w-16 text-center rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />

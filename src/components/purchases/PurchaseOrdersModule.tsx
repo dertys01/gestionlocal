@@ -164,7 +164,7 @@ export function PurchaseOrdersModule({ products }: { products: Product[] }) {
                 aria-label="Fournisseur"
                 className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >
-                <option value="">— Fournisseur (facultatif) —</option>
+                <option value="">Fournisseur (facultatif)</option>
                 {fournisseurs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <Input
@@ -184,7 +184,7 @@ export function PurchaseOrdersModule({ products }: { products: Product[] }) {
                   aria-label={`Produit ligne ${i + 1}`}
                   className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
-                  <option value="">— Produit —</option>
+                  <option value="">Produit</option>
                   {produitsActifs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <Input value={l.qty} onChange={(e) => majLigne(i, 'qty', e.target.value)}

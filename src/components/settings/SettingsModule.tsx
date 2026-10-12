@@ -322,7 +322,7 @@ export function SettingsModule() {
                       l'adresse disparaissait sans qu'on puisse la faire défiler
                       (disabled). Le texte, lui, passe à la ligne. */}
                   <p className="rounded-lg border border-input bg-slate-50 px-2.5 py-1 text-sm text-slate-500 break-all min-h-8 flex items-center">
-                    {user?.email ?? '—'}
+                    {user?.email ?? '-'}
                   </p>
                 </div>
                 {orgError && <p className="text-red-600 text-sm">{orgError}</p>}
@@ -457,7 +457,7 @@ export function SettingsModule() {
                   { label: 'Produits', value: limits.products === Infinity ? 'Illimité' : limits.products },
                   { label: 'Employés', value: limits.employees === Infinity ? 'Illimité' : limits.employees },
                   { label: 'Historique', value: limits.salesHistoryDays === Infinity ? 'Illimité' : `${limits.salesHistoryDays}j` },
-                  { label: 'Export CSV', value: limits.exportCsv ? '✓' : '✗' },
+                  { label: 'Export CSV', value: limits.exportCsv ? 'Oui' : 'Non' },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">{item.label}</p>
@@ -481,7 +481,7 @@ export function SettingsModule() {
               <CardContent className="p-5 space-y-3">
                 <h3 className="font-semibold text-slate-800 text-sm">Sauvegarde de vos données</h3>
                 <p className="text-xs text-slate-500">
-                  Téléchargez toutes vos données — produits, ventes, dettes, charges, fournisseurs —
+                  Téléchargez toutes vos données (produits, ventes, dettes, charges, fournisseurs)
                   dans un seul fichier. À conserver hors de l&apos;application.
                 </p>
                 <Button variant="outline" onClick={sauvegarder} disabled={sauvegardeEnCours} className="gap-2">

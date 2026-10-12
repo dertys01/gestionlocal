@@ -51,13 +51,13 @@ describe('formules — configuration externe', () => {
     expect(plans.prixAAnnuelLabel('pro')).toMatch(/20\s?000\s?F \/ an/);
   });
 
-  it('sans variable : illimité partout, prix « — », jamais un chiffre inventé', async () => {
+  it('sans variable : illimité partout, prix « - », jamais un chiffre inventé', async () => {
     const plans = await plansFrais(undefined);
 
     expect(plans.PLAN_LIMITS.free.products).toBe(Infinity);
     expect(plans.PLAN_LIMITS.free.employees).toBe(Infinity);
     expect(plans.PLAN_LIMITS.free.salesHistoryDays).toBe(Infinity);
-    expect(plans.prixMensuelLabel('starter')).toBe('—');
+    expect(plans.prixMensuelLabel('starter')).toBe('-');
     expect(plans.prixAAnnuelLabel('pro')).toBeNull();
     // Les verrous de fonctionnalité, eux, ne sont pas des valeurs :
     // ils restent ceux de require_feature(), configuration ou non.
@@ -69,7 +69,7 @@ describe('formules — configuration externe', () => {
     const plans = await plansFrais('{pas du json');
 
     expect(plans.PLAN_LIMITS.pro.products).toBe(Infinity);
-    expect(plans.prixMensuelLabel('pro')).toBe('—');
+    expect(plans.prixMensuelLabel('pro')).toBe('-');
   });
 
   it('un quota négatif est une faute de saisie, pas une offre : illimité', async () => {
