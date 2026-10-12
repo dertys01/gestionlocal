@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Loader2, RefreshCw, Bug, Lightbulb, HelpCircle, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSupabase } from '@/components/providers/SupabaseProvider';
@@ -80,9 +81,12 @@ export default function RetoursAdminPage() {
       <div className="mx-auto max-w-3xl p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-slate-800">Retours utilisateurs</h1>
-          <Button variant="outline" size="sm" onClick={() => void charger()} className="gap-1.5">
-            <RefreshCw className="h-4 w-4" /> Actualiser
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/plans" className="text-sm text-indigo-600 hover:underline">Plans</Link>
+            <Button variant="outline" size="sm" onClick={() => void charger()} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" /> Actualiser
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
