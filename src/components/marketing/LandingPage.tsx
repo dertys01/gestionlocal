@@ -144,8 +144,8 @@ export function LandingPage() {
           </h1>
           <p className="mt-5 text-slate-600 text-lg max-w-2xl mx-auto">
             GestionLocal est l&apos;application des commerçants : encaissez au
-            comptoir, relevez ce que les clients vous devez, et savez ce qu&apos;il
-            vous reste en stock, depuis votre téléphone.
+            comptoir, relevez ce que les clients vous doivent, et sachez à tout
+            moment ce qu&apos;il vous reste en stock — depuis votre téléphone.
           </p>
           <div className="mt-8 flex justify-center">
             <Appels />
