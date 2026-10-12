@@ -28,6 +28,8 @@ import { ForecastModule } from '@/components/forecast/ForecastModule';
 import { FloorModule } from '@/components/restaurant/FloorModule';
 import { RecipesModule } from '@/components/restaurant/RecipesModule';
 import { FormulesModule } from '@/components/restaurant/FormulesModule';
+import { BetaBanner } from '@/components/beta/BetaBanner';
+import { FeedbackWidget } from '@/components/beta/FeedbackWidget';
 import { ReservationsModule } from '@/components/restaurant/ReservationsModule';
 import { KitchenDisplay } from '@/components/restaurant/KitchenDisplay';
 import { TeamModule } from '@/components/team/TeamModule';
@@ -79,6 +81,7 @@ export default function HomePage() {
   // Relu à chaque retour sur l'accueil : c'est ce qui le met à jour après une vente.
   const { today, todayError } = useToday(tab === 'dashboard' && !!org?.onboarding_done);
   const [showScanner, setShowScanner] = useState(false);
+  const [feedbackOuvert, setFeedbackOuvert] = useState(false);
   const [showInventoryCount, setShowInventoryCount] = useState(false);
   const [scanNotFound, setScanNotFound] = useState('');
   // Demande transmise au POS pour y ajouter le produit scanné.
@@ -310,6 +313,9 @@ export default function HomePage() {
             affichait de larges marges mortes sur grand écran et le panier
             se faisait écraser par la colonne produits. */}
         <div className={`p-4 mx-auto ${tab === 'pos' ? 'max-w-none' : 'max-w-5xl'}`}>
+          {/* Bandeau « version de test » : les premiers utilisateurs doivent
+              savoir que l'app se met au point, et où écrire. */}
+          <BetaBanner onFeedback={() => setFeedbackOuvert(true)} />
           {/* Ventes hors-ligne en attente : l'information est en haut de TOUS
               les onglets — un commerçant qui vient d'encaisser sans réseau doit
               pouvoir vérifier d'un coup d'œil que rien n'est perdu. */}
@@ -557,6 +563,13 @@ export default function HomePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bouton « Signaler / Suggérer » + sa fenêtre : présents partout. */}
+      <FeedbackWidget
+        open={feedbackOuvert}
+        onOpenChange={setFeedbackOuvert}
+        page={tab}
+      />
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { NextRequest } from 'next/server';
 
 const h = vi.hoisted(() => {
   const state = {
-    getUser: { data: { user: { id: 'u1' } as { id: string } | null }, error: null as null | { message: string } },
+    getUser: { data: { user: { id: 'u1', email: 'a@b.c' } as { id: string; email: string | null } | null }, error: null as null | { message: string } },
     rpc: { data: 'u1' as unknown, error: null as null | { message: string } },
     calls: 0,
   };
@@ -31,7 +31,7 @@ const req = (headers: Record<string, string> = {}) =>
   new NextRequest(new URL('http://localhost/api/x'), { headers });
 
 beforeEach(() => {
-  h.state.getUser = { data: { user: { id: 'u1' } }, error: null };
+  h.state.getUser = { data: { user: { id: 'u1', email: 'a@b.c' } }, error: null };
   h.state.rpc = { data: 'u1', error: null };
   h.state.calls = 0;
 });
@@ -57,8 +57,8 @@ describe('readUser', () => {
     expect(h.state.calls).toBe(0);
   });
 
-  it('jeton valide : renvoie l’identité', async () => {
-    expect(await readUser(req({ authorization: 'Bearer ok' }))).toEqual({ id: 'u1' });
+  it('jeton valide : renvoie l’identité (id + e-mail)', async () => {
+    expect(await readUser(req({ authorization: 'Bearer ok' }))).toEqual({ id: 'u1', email: 'a@b.c' });
   });
 
   it('jeton refusé : null', async () => {

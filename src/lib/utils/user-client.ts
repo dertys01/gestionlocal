@@ -65,7 +65,7 @@ export function clientFor(req: NextRequest): SupabaseClient {
  * contente pas de décoder le jeton : un jeton forgé, révoqué ou expiré est
  * réellement refusé. Le décodage seul ne le serait pas.
  */
-export async function readUser(req: NextRequest): Promise<{ id: string } | null> {
+export async function readUser(req: NextRequest): Promise<{ id: string; email: string | null } | null> {
   const jwt = bearerOf(req);
   if (!jwt) return null;
   const db = createClient(SUPABASE_URL, ANON_KEY, {
@@ -73,7 +73,7 @@ export async function readUser(req: NextRequest): Promise<{ id: string } | null>
   });
   const { data, error } = await db.auth.getUser(jwt);
   if (error || !data?.user) return null;
-  return { id: data.user.id };
+  return { id: data.user.id, email: data.user.email ?? null };
 }
 
 /**

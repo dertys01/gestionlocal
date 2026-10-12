@@ -146,6 +146,8 @@ const ORDER = [
   'migration_restaurant_formules.sql',
   // Factures normalisées e-MECeF : piste d'audit (code MECeF, QR, NIM).
   'migration_mecef_invoices.sql',
+  // Retours utilisateurs (bêta) : bouton « Signaler / Suggérer ».
+  'migration_feedback.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -4445,6 +4447,34 @@ console.log('\n▸ e-MECeF — piste d’audit des factures');
     await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
   }
   check('27h3. une autre boutique ne voit pas ces factures', vus === 0, `vus=${vus}`);
+}
+
+// ─── 27i. Bêta : retours utilisateurs ─────────────────────────────────────
+console.log('\n▸ Bêta — retours utilisateurs');
+{
+  await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
+  await e('SET ROLE authenticated');
+  let insere = true;
+  let vus = -1;
+  try {
+    await q(`INSERT INTO feedback (owner_id, author_id, author_email, kind, message, page)
+      VALUES ('${RESTO}', '${RESTO}', 'patron@test.ci', 'bug', 'Le bouton plante au comptoir', 'pos')`);
+    vus = Number((await q(`SELECT count(*) FROM feedback`)).rows[0].count);
+  } catch { insere = false; }
+  await e('RESET ROLE');
+  await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  check('27i1. une boutique écrit et lit ses retours', insere && vus === 1, `insere=${insere} vus=${vus}`);
+
+  await q(`SELECT set_config('request.jwt.claim.sub', '${PATRON}', false)`);
+  await e('SET ROLE authenticated');
+  let vusAutre = -1;
+  try {
+    vusAutre = Number((await q(`SELECT count(*) FROM feedback`)).rows[0].count);
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+  check('27i2. une autre boutique ne voit pas ces retours', vusAutre === 0, `vus=${vusAutre}`);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';
