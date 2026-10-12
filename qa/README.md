@@ -181,6 +181,19 @@ QA_PASSWORD=<mot de passe> node qa/accueil.mjs <email> 375 gratuit
 Liens « Relancer » au format international, Excel des dettes et des ventes
 (séparateur `;`), PDF lisible à 375 px. Compte en plan Starter ou Pro.
 
+## `captures-accueil.mjs` — les captures de la page d'accueil
+
+Refait `public/captures/{tableau-du-jour,caisse,journal}.png` (375 x 812)
+depuis un compte réel : le tableau du jour, la caisse, le journal. Le bandeau
+« version de test » est masqué. À relancer quand l'interface change, sinon la
+page d'accueil montre une application qui n'existe plus.
+
 ```bash
+QA_BASE=https://... QA_PASSWORD=<mot de passe> node qa/captures-accueil.mjs <email>
+```
+
+La connexion se fait au clavier (`pressSequentially`), pas par `fill()` : les
+champs contrôlés de React ne réagissent pas au `fill`, et Supabase recevait un
+e-mail vide (« missing email or phone »).```bash
 QA_PASSWORD=<mot de passe> node qa/exports.mjs <email>
 ```
