@@ -137,10 +137,16 @@ accès, **personne ne peut délivrer de facture** — c'est le choix assumé.
 - **Le reçu simple n'est jamais bloqué** : c'est l'article non négociable. Le
   reçu est imprimé SANS numéro ; « FACTURE N° » n'existe que sur le bouton
   facture, une fois les trois conditions réunies.
-- **`emettreFacture()`** : squelette qui rejette, comme `FedaPay.creerPaiement`
-  — aucun appel réseau avant les accès réels. Quand ils arriveront, seules cette
-  fonction et `APPELS_DGI` bougent : le verrou, les routes et les écrans sont
-  posés.
+- **`emettreFacture()`** : appelle réellement la DGI — soumission
+  (`POST /api/invoice`) puis confirmation (`PUT /api/invoice/{uid}/confirm`),
+  via `src/lib/mecef/client.ts`. `src/lib/mecef/invoice.ts` construit la
+  demande depuis la vente (fonction pure, testée sans réseau). Sans jeton, la
+  fonction refuse : aucune facture de façade.
+- **`POST /api/mecef/invoice`** : délivre une facture. Le navigateur n'envoie
+  que l'identifiant de la vente ; la route relit montant, lignes et IFU en
+  base, appelle la DGI, et range les éléments de sécurité (code MECeF, QR,
+  NIM) dans `mecef_invoices` (une ligne par vente, RLS équipe, unicité sur
+  `sale_id`). Une facture déjà normalisée se renvoie telle quelle (idempotence).
 
 ## Ce qui empêche le retour
 

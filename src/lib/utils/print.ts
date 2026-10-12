@@ -20,6 +20,8 @@ interface PrintData {
   date: Date;
   /** Numéro de facture normalisée ; absent/null sur les plans non-Pro. */
   invoiceNumber?: string | null;
+  /** Éléments de sécurité e-MECeF (DGI) : code, QR, NIM. */
+  mecef?: { code: string; qrCode: string; nim: string } | null;
   /** En crédit : acompte versé sur-le-champ, et reste à recouvrer. */
   advance?: number;
   due?: number;
@@ -156,6 +158,24 @@ export function printReceipt(data: PrintData) {
         })()
       : '',
     `</table>`,
+    // Éléments de sécurité e-MECeF : sans eux, le papier n'est pas une
+    // facture normalisée vérifiable (code MECeF, NIM, QR). Rendus uniquement
+    // quand la DGI les a réellement délivrés.
+    isNormalized && data.mecef
+      ? [
+          `<div class="divider"></div>`,
+          `<p class="bold center">FACTURE NORMALISÉE</p>`,
+          `<p class="center label">Code MECeF/DGI : ${escapeHtml(data.mecef.code)}</p>`,
+          `<p class="center label">NIM : ${escapeHtml(data.mecef.nim)}</p>`,
+          data.mecef.qrCode
+            ? `<p class="center"><img alt="QR e-MECeF" style="width:120px;height:120px" src="${
+                data.mecef.qrCode.startsWith('data:')
+                  ? escapeHtml(data.mecef.qrCode)
+                  : `data:image/png;base64,${escapeHtml(data.mecef.qrCode)}`
+              }"></p>`
+            : '',
+        ].join('')
+      : '',
     footer,
     `<div style="margin-top:16px;text-align:center">`,
     `<button onclick="window.print()" style="padding:8px 20px;cursor:pointer;border:1px solid #000;background:#fff;font-size:12px">`,

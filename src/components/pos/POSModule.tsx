@@ -15,6 +15,7 @@ import {
   PackageX,
   RotateCcw,
   Plus,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -327,8 +328,12 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     setCheckoutError('');
   }, [cart, paymentMethod, clientName, clientPhone, advance, advanceMethod, amountGiven]);
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
+  // Délivrance de la facture normalisée : état d'attente et message d'échec.
+  const [factureEnCours, setFactureEnCours] = useState(false);
+  const [factureErreur, setFactureErreur] = useState('');
   const fermerRecu = () => {
     setReceipt(null);
+    setFactureErreur('');
     onReceiptClosed?.();
   };
   /**
@@ -342,6 +347,47 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
     ifu: org?.ifu ?? null,
     connexion: connexionMecef,
   });
+
+  /**
+   * Délivre la facture normalisée : la route serveur relit la vente en base,
+   * la DGI normalise (soumission + confirmation) et renvoie le code MECeF, le
+   * QR et le NIM ; on imprime alors la facture. Le montant et les lignes ne
+   * viennent jamais du navigateur.
+   */
+  const delivrerFacture = async () => {
+    if (!receipt || !org) return;
+    setFactureErreur('');
+    setFactureEnCours(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const jwt = data.session?.access_token;
+      if (!jwt) {
+        setFactureErreur('Session expirée, reconnectez-vous.');
+        return;
+      }
+      const res = await fetch('/api/mecef/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({ saleId: receipt.saleId }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { codeMECeFDGI?: string; qrCode?: string; nim?: string; error?: string }
+        | null;
+      if (!res.ok || !json?.codeMECeFDGI) {
+        setFactureErreur(json?.error ?? 'Facture indisponible pour le moment.');
+        return;
+      }
+      printReceipt({
+        ...receipt,
+        org,
+        mecef: { code: json.codeMECeFDGI, qrCode: json.qrCode ?? '', nim: json.nim ?? '' },
+      });
+    } catch {
+      setFactureErreur('Facture indisponible pour le moment.');
+    } finally {
+      setFactureEnCours(false);
+    }
+  };
   /**
    * Sur mobile, le panier est un panneau plein écran plutôt qu'une colonne
    * sous la grille. En colonne il arrivait après les produits : avec 40
@@ -1912,17 +1958,22 @@ export function POSModule({ products, onSaleComplete, addToCartRequest, onAddToC
                   au lieu d'un bouton mort. Masquée sur une vente hors-ligne :
                   sans numéro attribué, il n'y a rien à délivrer. */}
               {!receipt?.offline && (factureEtat.delivrable ? (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-                  onClick={() => {
-                    if (!receipt || !org) return;
-                    printReceipt({ ...receipt, org });
-                  }}
-                >
-                  <FileText className="h-4 w-4" />
-                  Facture normalisée
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => void delivrerFacture()}
+                    disabled={factureEnCours}
+                  >
+                    {factureEnCours
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <FileText className="h-4 w-4" />}
+                    {factureEnCours ? 'Normalisation auprès de la DGI…' : 'Facture normalisée'}
+                  </Button>
+                  {factureErreur && (
+                    <p className="text-xs text-red-600 text-center">{factureErreur}</p>
+                  )}
+                </>
               ) : (
                 <p className="text-xs text-slate-500 flex items-center justify-center gap-1 text-center">
                   <FileText className="h-3 w-3 shrink-0" />

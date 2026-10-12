@@ -33,7 +33,10 @@ const { products, from, rpc, supabase, contexte, connexion, printReceipt } =
     const supabase = {
       from,
       rpc,
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+        getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'jwt-test' } } }),
+      },
     };
     return { products: produits, from, rpc, supabase, contexte, connexion, printReceipt };
   });
@@ -118,27 +121,54 @@ const boutonFacture = () =>
   screen.queryByRole('button', { name: 'Facture normalisée' });
 
 describe('Caisse — facture normalisée : le verrou', () => {
-  it('verrou ouvert : le bouton facture imprime avec le numéro, le reçu sans', async () => {
-    await encaisser();
+  it('verrou ouvert : le bouton facture normalise auprès de la DGI puis imprime', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        codeMECeFDGI: 'C'.repeat(24),
+        qrCode: 'AAAA',
+        nim: 'NIM-1',
+        dateTime: '2026-10-12T10:00:00Z',
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await encaisser();
 
-    // Le verrou est ouvert (Pro + IFU + connexion) : le bouton existe.
-    const bouton = await waitFor(() => {
-      const b = boutonFacture();
-      expect(b).not.toBeNull();
-      return b!;
-    });
-    expect(screen.getByText('Imprimer le reçu')).toBeInTheDocument();
+      // Le verrou est ouvert (Pro + IFU + connexion) : le bouton existe.
+      const bouton = await waitFor(() => {
+        const b = boutonFacture();
+        expect(b).not.toBeNull();
+        return b!;
+      });
+      expect(screen.getByText('Imprimer le reçu')).toBeInTheDocument();
 
-    fireEvent.click(bouton);
-    expect(printReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({ invoiceNumber: 'FA-0007' }),
-    );
+      // Le bouton facture interroge la route (qui relit la vente en base),
+      // puis imprime la facture avec les éléments de sécurité de la DGI.
+      fireEvent.click(bouton);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          '/api/mecef/invoice',
+          expect.objectContaining({ method: 'POST' }),
+        ),
+      );
+      await waitFor(() =>
+        expect(printReceipt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            invoiceNumber: 'FA-0007',
+            mecef: expect.objectContaining({ code: 'C'.repeat(24), nim: 'NIM-1' }),
+          }),
+        ),
+      );
 
-    // Le reçu, lui, ne porte JAMAIS le numéro : deux boutons, deux documents.
-    fireEvent.click(screen.getByText('Imprimer le reçu'));
-    expect(printReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({ invoiceNumber: null }),
-    );
+      // Le reçu, lui, ne porte JAMAIS le numéro : deux boutons, deux documents.
+      fireEvent.click(screen.getByText('Imprimer le reçu'));
+      expect(printReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ invoiceNumber: null }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('sans IFU : le verrou dit d’aller dans Paramètres, le reçu reste', async () => {

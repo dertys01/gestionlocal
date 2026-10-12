@@ -144,6 +144,8 @@ const ORDER = [
   'migration_restaurant_variants.sql',
   // Formules : menus composés (groupes + composants, stock par composants).
   'migration_restaurant_formules.sql',
+  // Factures normalisées e-MECeF : piste d'audit (code MECeF, QR, NIM).
+  'migration_mecef_invoices.sql',
 ];
 
 // schema.sql et migration_team.sql sont appliqués deux fois, à la fin : sur une
@@ -4414,6 +4416,35 @@ const F_O = 'f0f0f0f0-0000-0000-0000-0000000000a6';
   await e('RESET ROLE');
   await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
   check('27g6. un composant hors formule est refusé', refuseHorsFormule);
+}
+
+// ─── 27h. e-MECeF : piste d'audit des factures ────────────────────────────
+console.log('\n▸ e-MECeF — piste d’audit des factures');
+{
+  const saleId = (await q(`SELECT id FROM sales WHERE user_id='${RESTO}' ORDER BY created_at DESC LIMIT 1`)).rows[0].id;
+
+  await q(`INSERT INTO mecef_invoices (owner_id, sale_id, uid, code_mecef, status)
+    VALUES ('${RESTO}', '${saleId}', 'u-1', 'CODE-MECEF', 'normalized')`);
+  const n = Number((await q(`SELECT count(*) FROM mecef_invoices WHERE sale_id='${saleId}'`)).rows[0].count);
+  check('27h1. une facture normalisée est tracée', n === 1, `n=${n}`);
+
+  let doublon = false;
+  try {
+    await q(`INSERT INTO mecef_invoices (owner_id, sale_id) VALUES ('${RESTO}', '${saleId}')`);
+  } catch { doublon = true; }
+  check('27h2. une seule facture par vente (unicité)', doublon);
+
+  // RLS : une autre boutique ne voit rien.
+  await q(`SELECT set_config('request.jwt.claim.sub', '${PATRON}', false)`);
+  await e('SET ROLE authenticated');
+  let vus = -1;
+  try {
+    vus = Number((await q(`SELECT count(*) FROM mecef_invoices`)).rows[0].count);
+  } finally {
+    await e('RESET ROLE');
+    await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
+  }
+  check('27h3. une autre boutique ne voit pas ces factures', vus === 0, `vus=${vus}`);
 }
 
 const CAISSER2 = 'abababab-0000-4000-8000-0000000000ca';

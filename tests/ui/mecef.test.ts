@@ -81,25 +81,35 @@ describe('peutDelivrerFacture', () => {
 });
 
 describe('etatLiaison (serveur)', () => {
-  it('sans appels DGI, la connexion n’est jamais ouverte, jeton ou non', () => {
-    // APPELS_DGI est à false : même un jeton posé n’ouvre rien. C’est la
-    // même discipline que PAYMENTS_SANDBOX — on ne peut pas « oublier »
-    // d’écrire les appels et d’ouvrir la délivrance quand même.
+  it('sans jeton DGI, la connexion reste fermée', () => {
+    // Les appels sont écrits (APPELS_DGI = true) mais il manque le jeton :
+    // la délivrance reste fermée, comme avant l'agrément.
     expect(etatLiaison({}).branche).toBe(false);
-    expect(etatLiaison({ MECEF_TOKEN: 'jeton-de-test' }).branche).toBe(false);
-    expect(etatLiaison({ MECEF_TOKEN: 'jeton-de-test' }).motif).toContain('Appels DGI');
+    expect(etatLiaison({}).motif).toContain('MECEF_TOKEN');
+    expect(etatLiaison({ MECEF_TOKEN: '   ' }).branche).toBe(false);
   });
 
-  it('le motif parle de la cause, jamais du jeton en clair', () => {
+  it('avec un jeton, la connexion est ouverte', () => {
+    const etat = etatLiaison({ MECEF_TOKEN: 'jeton-de-test' });
+    expect(etat.branche).toBe(true);
+    expect(etat.motif).toBe('');
+  });
+
+  it('le motif ne contient jamais le jeton en clair', () => {
     const etat = etatLiaison({ MECEF_TOKEN: 'jeton-secret-tres-long' });
     expect(etat.motif).not.toContain('jeton-secret-tres-long');
   });
 });
 
-describe('emettreFacture (squelette)', () => {
-  it('refuse : aucun appel réseau avant les accès DGI', async () => {
-    await expect(
-      emettreFacture({ numero: 'FAC-2026-00042', orgId: 'org-1', ifu: 'AB12345678901', total: 1500 }),
-    ).rejects.toThrow(/non branchés/);
+describe('emettreFacture (verrou)', () => {
+  const vente = {
+    numero: 'FAC-2026-00042',
+    ifu: 'AB12345678901',
+    lignes: [{ name: 'Riz gras', unitPrice: 1500, quantity: 1 }],
+    paiements: [{ method: 'cash' as const, amount: 1500 }],
+  };
+
+  it('sans jeton DGI, refuse : aucune facture de façade', async () => {
+    await expect(emettreFacture(vente, {})).rejects.toThrow(/MECEF_TOKEN/);
   });
 });
