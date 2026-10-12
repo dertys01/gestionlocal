@@ -23,5 +23,13 @@ export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
-  sourcemaps: { disable: true },
+  // Source maps activées : les erreurs arrivent avec les vrais noms de
+  // fichiers et numéros de ligne, au lieu de « a3f2.js:1:48231 ». Un envoi
+  // qui échoue (jeton absent, droits insuffisants, réseau) ne doit JAMAIS
+  // faire échouer un déploiement : d'où errorHandler, qui journalise et
+  // laisse le build continuer. Sans jeton, le plugin saute l'envoi de lui-même.
+  sourcemaps: { disable: false },
+  errorHandler: (err) => {
+    console.warn('[sentry] source maps non envoyées :', err.message);
+  },
 });
