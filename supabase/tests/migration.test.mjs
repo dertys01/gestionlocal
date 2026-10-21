@@ -4204,7 +4204,7 @@ console.log('\n▸ Restaurant — couverts');
   await q(`SELECT set_config('request.jwt.claim.sub', '${RESTO}', false)`);
   await e('SET ROLE authenticated');
   try {
-    const r = (await q(`SELECT * FROM get_restaurant_stats(current_date, current_date, 'Africa/Porto-Novo')`)).rows[0];
+    const r = (await q(`SELECT * FROM get_restaurant_stats((now() at time zone 'Africa/Porto-Novo')::date, (now() at time zone 'Africa/Porto-Novo')::date, 'Africa/Porto-Novo')`)).rows[0];
     check('27c3. get_restaurant_stats répond sous RLS', r !== undefined && r.covers !== undefined,
       `ligne : ${JSON.stringify(r)}`);
   } finally {
@@ -4258,7 +4258,7 @@ const PM_O = 'f0f0f0f0-0000-0000-0000-0000000000e2';
   await e('SET ROLE authenticated');
   let sum;
   try {
-    sum = (await q(`SELECT cash, momo FROM get_sales_summary(current_date, current_date, 'Africa/Porto-Novo')`)).rows[0];
+    sum = (await q(`SELECT cash, momo FROM get_sales_summary((now() at time zone 'Africa/Porto-Novo')::date, (now() at time zone 'Africa/Porto-Novo')::date, 'Africa/Porto-Novo')`)).rows[0];
   } finally {
     await e('RESET ROLE');
     await q(`SELECT set_config('request.jwt.claim.sub', '', false)`);
