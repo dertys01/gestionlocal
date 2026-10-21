@@ -277,11 +277,23 @@ if (cible.index >= 0) {
     JSON.stringify(produitApres)
   );
 
-  // Numéro de facture : unique et croissant
+  // Numéro de facture : unique et croissant.
+  //
+  // Réservé au plan Pro payé — create_sale() ne numérote que si le plan
+  // EFFECTIF est « pro » (migration_facture_plan_effectif.sql). Sur un compte
+  // gratuit, l'absence de numéro est le comportement attendu : le signaler
+  // comme un échec ferait chercher un bug qui n'existe pas.
+  const [org] = await base('/rest/v1/organizations?select=plan,plan_valid_until');
+  const proPaye = org?.plan === 'pro' && (!org.plan_valid_until || new Date(org.plan_valid_until) > new Date());
   const factures = await base('/rest/v1/sales?select=invoice_number&order=created_at.desc&limit=5');
   const numeros = factures.map((s) => s.invoice_number).filter(Boolean);
-  verifie('chaque vente reçoit un numéro de facture', numeros.length >= 1, JSON.stringify(numeros));
-  verifie('les numéros de facture sont uniques', new Set(numeros).size === numeros.length, JSON.stringify(numeros));
+  if (proPaye) {
+    verifie('chaque vente reçoit un numéro de facture', numeros.length >= 1, JSON.stringify(numeros));
+    verifie('les numéros de facture sont uniques', new Set(numeros).size === numeros.length, JSON.stringify(numeros));
+  } else {
+    console.log('  — numéro de facture : réservé au plan Pro (compte gratuit), non vérifié');
+    verifie('aucun numéro de facture sur un compte gratuit', numeros.length === 0, JSON.stringify(numeros));
+  }
 }
 
 // ─── « Reprendre la dernière vente » ────────────────────────────────
@@ -347,11 +359,19 @@ if (await champMontant.isVisible().catch(() => false)) {
   await page.waitForTimeout(300);
   await page.locator('button:has-text("Encaisser")').first().click();
   await page.waitForTimeout(4000);
-  const apresReglement = await base('/rest/v1/credit_payments?select=amount,method&order=created_at.desc&limit=1');
+  const apresReglement = await base('/rest/v1/credit_payments?select=amount,method,gesture_id&order=created_at.desc&limit=20');
+  // Un versement est ventilé en une ligne par vente soldée : le geste se lit
+  // au gesture_id, pas à la ligne (migration_ca_caisse.sql). Un client qui a
+  // deux ventes ouvertes reçoit donc 500 F en deux lignes (200 + 300) : c'est
+  // le total du geste qui vaut 500, pas la dernière ligne.
+  const geste = apresReglement[0]?.gesture_id;
+  const totalGeste = apresReglement
+    .filter((p) => p.gesture_id === geste)
+    .reduce((s, p) => s + Number(p.amount), 0);
   verifie(
-    `le règlement de 500 F est enregistré (dernier : ${apresReglement[0]?.amount} F)`,
-    Number(apresReglement[0]?.amount) === 500,
-    JSON.stringify(apresReglement[0])
+    `le règlement de 500 F est enregistré (dernier geste : ${totalGeste} F)`,
+    totalGeste === 500,
+    JSON.stringify(apresReglement.slice(0, 3))
   );
   const dettesApres = await texte();
   verifie('le solde du client diminue après règlement', !/à recouvrer/.test(dettesApres) || dettesApres.includes('Client QA'));
@@ -591,10 +611,17 @@ if (PROFIL === 'restaurant') {
     );
   }
 
-  await onglet('Recettes');
-  await page.waitForTimeout(3000);
-  const recettes = await texte();
-  verifie('les recettes listent des plats', /pour 1 portion|Recette|recette/i.test(recettes), recettes.slice(0, 250));
+  // L'onglet Recettes n'est présent qu'en mode complet (restaurant). En mode
+  // simple, il n'y a pas d'onglet à ouvrir : on le dit au lieu d'échouer sur
+  // un écran qui n'est simplement pas proposé.
+  if (await page.locator('button[aria-label="Recettes"]').count()) {
+    await onglet('Recettes');
+    await page.waitForTimeout(3000);
+    const recettes = await texte();
+    verifie('les recettes listent des plats', /pour 1 portion|Recette|recette/i.test(recettes), recettes.slice(0, 250));
+  } else {
+    console.log('  — onglet Recettes absent (mode simple), non vérifié');
+  }
 }
 
 // ─── Erreurs JavaScript ─────────────────────────────────────────────

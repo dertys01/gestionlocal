@@ -67,9 +67,18 @@ const t0 = Date.now();
 if (process.env.QA_EMAIL) {
   // Compte existant, onboarding remis à zéro en SQL : l'inscription est
   // limitée à quelques comptes par heure et par adresse IP.
-  await page.goto(BASE);
-  await page.fill('input[type="email"]', process.env.QA_EMAIL);
-  await page.fill('input[type="password"]', motDePasse);
+  //
+  // On passe par /connexion : la racine est la page publique (accueil) en
+  // production, elle ne contient aucun champ. La saisie se fait au clavier
+  // (`fill()` ne réveille pas toujours l'état React des champs contrôlés),
+  // après l'hydratation du formulaire.
+  await page.goto(`${BASE}/connexion`);
+  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await page.locator('#login-email').click();
+  await page.locator('#login-email').pressSequentially(process.env.QA_EMAIL, { delay: 20 });
+  await page.locator('#login-mdp').click();
+  await page.locator('#login-mdp').pressSequentially(motDePasse, { delay: 20 });
   await page.locator('button[type="submit"]').first().click();
 } else {
   await page.goto(`${BASE}/register`);

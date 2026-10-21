@@ -38,7 +38,11 @@ export function BetaBanner({ onFeedback }: { onFeedback: () => void }) {
       >
         Donner mon avis
       </button>
-      <button onClick={fermer} aria-label="Masquer le bandeau" className="shrink-0 text-indigo-400 hover:text-indigo-700">
+      <button
+        onClick={fermer}
+        aria-label="Masquer le bandeau"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700"
+      >
         <X className="h-4 w-4" />
       </button>
     </div>

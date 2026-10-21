@@ -295,22 +295,22 @@ export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, o
           <TableHeader>
             <TableRow className="bg-slate-50">
               <TableHead className="select-none" aria-sort={sortAria('name')}>
-                <button type="button" onClick={() => toggleSort('name')} className="flex w-full items-center gap-1 text-left font-medium">
+                <button type="button" onClick={() => toggleSort('name')} className="flex min-h-6 w-full items-center gap-1 text-left font-medium">
                   Produit <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
               <TableHead className="select-none" aria-sort={sortAria('category')}>
-                <button type="button" onClick={() => toggleSort('category')} className="flex w-full items-center gap-1 text-left font-medium">
+                <button type="button" onClick={() => toggleSort('category')} className="flex min-h-6 w-full items-center gap-1 text-left font-medium">
                   Catégorie <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
               <TableHead className="select-none text-right" aria-sort={sortAria('price_sell')}>
-                <button type="button" onClick={() => toggleSort('price_sell')} className="flex w-full items-center justify-end gap-1 font-medium">
+                <button type="button" onClick={() => toggleSort('price_sell')} className="flex min-h-6 w-full items-center justify-end gap-1 font-medium">
                   Prix <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
               <TableHead className="select-none text-right" aria-sort={sortAria('stock_qty')}>
-                <button type="button" onClick={() => toggleSort('stock_qty')} className="flex w-full items-center justify-end gap-1 font-medium">
+                <button type="button" onClick={() => toggleSort('stock_qty')} className="flex min-h-6 w-full items-center justify-end gap-1 font-medium">
                   Stock <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
