@@ -28,7 +28,7 @@ export function BetaBanner({ onFeedback }: { onFeedback: () => void }) {
   return (
     <div className="mb-3 flex items-start gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
       <FlaskConical className="h-4 w-4 shrink-0 mt-0.5" />
-      <span className="flex-1">
+      <span className="min-w-0 flex-1">
         <strong>Version de test.</strong> L&apos;application se met au point avec vous : dites-nous ce
         qui bloque ou ce qui manque, on corrige vite.
       </span>
