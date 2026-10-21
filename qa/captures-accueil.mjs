@@ -36,12 +36,15 @@ await p.addInitScript(() => {
 
 // Connexion. Saisie au clavier : `fill()` pose la valeur dans le DOM sans
 // réveiller l'état React des champs contrôlés, et Supabase recevait un e-mail
-// vide (« missing email or phone »).
+// vide (« missing email or phone »). On attend aussi que le formulaire soit
+// hydraté avant de taper, sinon les événements se perdent.
 await p.goto(`${base}/connexion`, { waitUntil: 'domcontentloaded' });
+await p.locator('#login-email').waitFor({ state: 'visible', timeout: 30_000 });
+await p.waitForTimeout(1500);
 await p.locator('#login-email').click();
-await p.locator('#login-email').pressSequentially(email, { delay: 15 });
+await p.locator('#login-email').pressSequentially(email, { delay: 20 });
 await p.locator('#login-mdp').click();
-await p.locator('#login-mdp').pressSequentially(process.env.QA_PASSWORD, { delay: 15 });
+await p.locator('#login-mdp').pressSequentially(process.env.QA_PASSWORD, { delay: 20 });
 await p.locator('form').getByRole('button', { name: 'Se connecter' }).click();
 
 // Attendre le tableau de bord, puis la fin des chargements (le « … »).
