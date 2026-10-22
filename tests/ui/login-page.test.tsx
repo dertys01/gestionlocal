@@ -18,6 +18,9 @@ const h = vi.hoisted(() => {
     setSession: { error: null as null | { message: string } },
     calls: { signIn: [] as unknown[], reset: [] as Array<[string, { redirectTo: string }]>, setSession: [] as unknown[] },
     fetch: vi.fn(),
+    // Session lue par le composant : nulle par défaut, comme sur la page.
+    session: { user: null as null | { id: string }, loading: false },
+    replace: vi.fn(),
   };
   const supabase = {
     auth: {
@@ -29,8 +32,15 @@ const h = vi.hoisted(() => {
   return { state, supabase };
 });
 
-vi.mock('@/components/providers/SupabaseProvider', () => ({ useSupabase: () => ({ supabase: h.supabase }) }));
+vi.mock('@/components/providers/SupabaseProvider', () => ({
+  useSupabase: () => ({
+    supabase: h.supabase,
+    user: h.state.session.user,
+    loading: h.state.session.loading,
+  }),
+}));
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: h.state.replace }) }));
 
 import { LoginPage } from '@/components/auth/LoginPage';
 
@@ -45,6 +55,8 @@ beforeEach(() => {
   h.state.calls.setSession = [];
   h.state.fetch.mockReset();
   h.state.fetch.mockImplementation(async () => json({ access_token: 'at', refresh_token: 'rt' }));
+  h.state.session = { user: null, loading: false };
+  h.state.replace.mockReset();
   vi.stubGlobal('fetch', h.state.fetch);
 });
 
@@ -80,6 +92,19 @@ describe('LoginPage — connexion', () => {
     await waitFor(() => expect(screen.getByText(/rencontre un incident/)).toBeInTheDocument());
   });
 
+  it('une session déjà ouverte renvoie vers l\'application', async () => {
+    h.state.session = { user: { id: 'u1' }, loading: false };
+    render(<LoginPage />);
+    await waitFor(() => expect(h.state.replace).toHaveBeenCalledWith('/'));
+  });
+
+  it('pendant la restauration de la session, le formulaire reste affiché', () => {
+    h.state.session = { user: null, loading: true };
+    render(<LoginPage />);
+    expect(h.state.replace).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+
   it('bascule l’affichage du mot de passe', () => {
     render(<LoginPage />);
     const mdp = screen.getByLabelText('Mot de passe') as HTMLInputElement;
@@ -102,6 +127,27 @@ describe('LoginPage — inscription', () => {
     remplir();
 
     await waitFor(() => expect(h.state.calls.setSession[0]).toEqual({ access_token: 'at', refresh_token: 'rt' }));
+  });
+
+  it('succès : quitte le formulaire pour l\'application', async () => {
+    // C'était le bug : le compte était créé, la session ouverte, et la page
+    // /register restait affichée. Le nouvel utilisateur ne voyait jamais
+    // l'assistant de premier lancement.
+    render(<LoginPage initialMode="register" />);
+    remplir();
+
+    await waitFor(() => expect(h.state.replace).toHaveBeenCalledWith('/'));
+  });
+
+  it('session impossible : reste sur le formulaire et explique', async () => {
+    h.state.setSession = { error: { message: 'nope' } };
+    render(<LoginPage initialMode="register" />);
+    remplir();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Compte créé, mais connexion impossible : nope/)).toBeInTheDocument(),
+    );
+    expect(h.state.replace).not.toHaveBeenCalled();
   });
 
   it('refus serveur : affiche l’erreur', async () => {

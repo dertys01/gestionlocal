@@ -180,6 +180,15 @@ export async function POST(req: NextRequest) {
     const anonClient = createClient(SUPABASE_URL, ANON_KEY);
     const { data: session, error: loginError } = await anonClient.auth.signInWithPassword({ email, password });
     if (loginError || !session.session) {
+      // Le compte est créé, mais la session ne s'ouvre pas. Sans ce journal, la
+      // cause exacte (identifiants refusés, quota GoTrue, délai de propagation)
+      // était perdue : la route répondait « veuillez vous connecter » et rien
+      // n'expliquait pourquoi. On garde le code et le statut, jamais le jeton.
+      console.error('[register] connexion automatique impossible', {
+        status: loginError?.status,
+        code: loginError?.code,
+        message: loginError ? sanitizeError(loginError) : 'session absente',
+      });
       return NextResponse.json({ error: 'Compte créé, veuillez vous connecter.' }, { status: 200 });
     }
 

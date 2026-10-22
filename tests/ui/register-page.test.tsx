@@ -6,8 +6,11 @@ import { render, screen } from '@testing-library/react';
  * « Inscription ». On vérifie qu'on atterrit bien sur le formulaire d'inscription
  * (nom de boutique), pas sur celui de connexion.
  */
-vi.mock('@/components/providers/SupabaseProvider', () => ({ useSupabase: () => ({ supabase: { auth: {} } }) }));
+vi.mock('@/components/providers/SupabaseProvider', () => ({
+  useSupabase: () => ({ supabase: { auth: {} }, user: null, loading: false }),
+}));
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
 import RegisterPage from '@/app/register/page';
 

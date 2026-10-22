@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,8 @@ import { useSupabase } from '@/components/providers/SupabaseProvider';
 
 // ── Page de connexion / inscription ──
 export function LoginPage({ initialMode = 'login' }: { initialMode?: 'login' | 'register' | 'forgot' } = {}) {
-  const { supabase } = useSupabase();
+  const { supabase, user, loading: sessionLoading } = useSupabase();
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +20,15 @@ export function LoginPage({ initialMode = 'login' }: { initialMode?: 'login' | '
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Une session ouverte ne laisse JAMAIS le formulaire à l'écran. /connexion
+  // avait ce garde ; /register, non : après une inscription réussie, le compte
+  // et la session existaient, mais la page restait sur le formulaire et le
+  // nouvel utilisateur ne voyait jamais l'assistant. Le garde vit donc ici,
+  // pour les deux routes.
+  useEffect(() => {
+    if (!sessionLoading && user) router.replace('/');
+  }, [sessionLoading, user, router]);
 
   const switchMode = (m: 'login' | 'register' | 'forgot') => {
     setMode(m);
@@ -157,7 +168,14 @@ export function LoginPage({ initialMode = 'login' }: { initialMode?: 'login' | '
         access_token: json.access_token,
         refresh_token: json.refresh_token,
       });
-      if (sessErr) setError(`Compte créé, mais connexion impossible : ${sessErr.message}`);
+      if (sessErr) {
+        setError(`Compte créé, mais connexion impossible : ${sessErr.message}`);
+        return;
+      }
+      // Ne pas dépendre du seul effet ci-dessus : le jeton est posé, on quitte
+      // le formulaire tout de suite. L'assistant de premier lancement prend la
+      // suite à la racine.
+      router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Réseau indisponible. Réessayez.');
     } finally {
