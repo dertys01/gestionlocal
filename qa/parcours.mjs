@@ -68,9 +68,15 @@ const erreursReseau = [];
 page.on('pageerror', (e) => erreursReseau.push(e.message.slice(0, 150)));
 
 await page.goto(BASE + '/connexion', { waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(1200);
-await page.fill('input[type="email"]', EMAIL);
-await page.fill('input[type="password"]', PASSWORD);
+// Saisie au clavier après hydratation : voir qa/audit.mjs (même piège).
+const champEmail = page.locator('#login-email, input[type="email"]').first();
+await champEmail.waitFor({ state: 'visible', timeout: 30_000 });
+await page.waitForTimeout(1500);
+await champEmail.click();
+await champEmail.pressSequentially(EMAIL, { delay: 15 });
+const champMdp = page.locator('#login-mdp, input[type="password"]').first();
+await champMdp.click();
+await champMdp.pressSequentially(PASSWORD, { delay: 15 });
 await page.click('button[type="submit"]');
 await page.waitForSelector('button[aria-label="Accueil"]', { timeout: 30000 });
 await page.waitForTimeout(1500);
@@ -410,9 +416,16 @@ if (modaleRappro) {
     await champQte.fill('7');
     await page.waitForTimeout(300);
     await page.locator('.fixed.inset-0.z-50 form button[type="submit"]').first().click();
-    await page.waitForTimeout(3500);
-    const apres = await base('/rest/v1/products?select=name,stock_qty&limit=200');
-    const trouve = apres.find((p) => p.name === nomProduit);
+    // On attend l'effet, pas un délai fixe : une fonction serverless à froid
+    // peut écrire après le délai, et le test échouait alors sur une
+    // application qui avait simplement fini après lui.
+    let trouve = null;
+    for (let i = 0; i < 25; i++) {
+      await page.waitForTimeout(700);
+      const apres = await base('/rest/v1/products?select=name,stock_qty&limit=200');
+      trouve = apres.find((p) => p.name === nomProduit);
+      if (trouve && Number(trouve.stock_qty) === Number(stockAvant) + 7) break;
+    }
     verifie(
       `le réappro de 7 augmente le stock de « ${nomProduit} » (${stockAvant} → ${trouve?.stock_qty})`,
       trouve && Number(trouve.stock_qty) === Number(stockAvant) + 7,
@@ -440,10 +453,16 @@ await modale.locator('#pf-prix-achat').fill('1500');
 await modale.locator('#pf-prix-vente').fill('2500');
 await modale.locator('#pf-stock').fill('12');
 await modale.locator('button:has-text("Ajouter le produit")').first().click();
-await page.waitForTimeout(3500);
 
-const produitsApres = await base('/rest/v1/products?select=id,name,price_buy,price_sell,stock_qty&limit=200');
-const cree = produitsApres.find((p) => p.name === nomProduitQA);
+// Même raison que pour le réappro : on attend l'effet en base.
+let produitsApres = [];
+let cree = null;
+for (let i = 0; i < 25; i++) {
+  await page.waitForTimeout(700);
+  produitsApres = await base('/rest/v1/products?select=id,name,price_buy,price_sell,stock_qty&limit=200');
+  cree = produitsApres.find((p) => p.name === nomProduitQA);
+  if (cree) break;
+}
 verifie(
   'le produit créé est bien enregistré',
   produitsApres.length === produitsAvant + 1 && Boolean(cree),

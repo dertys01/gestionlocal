@@ -207,9 +207,28 @@ for (const format of FORMATS) {
     page.locator('button[aria-label="Accueil"]').first().isVisible().catch(() => false);
 
   const tenterConnexion = async () => {
-    await page.fill('input[type="email"]', EMAIL);
-    await page.fill('input[type="password"]', PASSWORD);
-    await page.click('button[type="submit"]');
+    if (await aLaBarre()) return true;
+    // Saisie au clavier, après l'hydratation du formulaire. `fill()` pose la
+    // valeur dans le DOM sans réveiller l'état React des champs contrôlés :
+    // Supabase recevait un e-mail vide et l'audit concluait « connexion
+    // impossible », alors que rien dans l'application n'était en cause.
+    const email = page.locator('#login-email, input[type="email"]').first();
+    const mdp = page.locator('#login-mdp, input[type="password"]').first();
+    // Le formulaire peut disparaître entre sa détection et la saisie : une
+    // session restaurée depuis le jeton injecté redirige vers le tableau de
+    // bord. Son absence n'est donc pas un échec, c'est peut-être une réussite.
+    const pret = await email.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false);
+    if (!pret) return aLaBarre();
+    await page.waitForTimeout(1200);
+    try {
+      await email.click({ timeout: 5_000 });
+      await email.pressSequentially(EMAIL, { delay: 15 });
+      await mdp.click({ timeout: 5_000 });
+      await mdp.pressSequentially(PASSWORD, { delay: 15 });
+      await page.locator('button[type="submit"]').first().click({ timeout: 8_000 });
+    } catch {
+      return aLaBarre();
+    }
     await page.waitForTimeout(4000);
     for (let i = 0; i < 20 && !(await aLaBarre()); i++) await page.waitForTimeout(500);
     return aLaBarre();
