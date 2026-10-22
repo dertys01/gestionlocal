@@ -11,7 +11,8 @@
  */
 
 import type { Domain } from '@/lib/modules';
-import { starterSku } from '@/lib/starterCatalog';
+import { starterCatalog, starterSku } from '@/lib/starterCatalog';
+import { formatQty } from '@/lib/utils/currency';
 
 export type BusinessType = 'epicerie' | 'boutique' | 'restaurant' | 'autre';
 
@@ -111,6 +112,62 @@ export function sampleRows(type: BusinessType, ownerId: string) {
     min_stock_level: s.minStock,
     is_active: true,
   }));
+}
+
+/** Un plat de la carte de démarrage, avec sa recette lisible. */
+export interface PlatDeDemarrage {
+  name: string;
+  priceSell: number;
+  /** « Poulet entier × 1 pce · Oignon × 0,05 kg · Piment × 0,01 kg » */
+  recette: string;
+  /** Nombre de lignes de recette, pour l'annoncer sans recompter à l'écran. */
+  lignes: number;
+}
+
+/**
+ * La carte de démarrage d'un restaurant.
+ *
+ * Un restaurant ne reçoit PAS les trois articles génériques du commerce : son
+ * unité de départ, c'est le plat AVEC sa recette. Sans recette, un plat ne
+ * déduit aucun ingrédient du stock et n'a pas de marge : le client découvre un
+ * module Recettes vide et croit que l'application ne sait pas faire. La carte
+ * de démarrage est donc le catalogue restaurant déjà écrit (plats, recettes,
+ * ingrédients au stock, boissons), présenté par plats plutôt que par articles.
+ *
+ * Les ingrédients sont comptés à part : ils ne s'affichent pas au menu, mais
+ * c'est leur stock qui rend la première vente possible.
+ */
+export function carteDeDemarrage(): {
+  plats: PlatDeDemarrage[];
+  ingredientsEnStock: number;
+  boissons: number;
+} {
+  const catalogue = starterCatalog('restaurant');
+  const unites = new Map(
+    catalogue.map((a) => [a.name.toLocaleLowerCase('fr'), a.unit])
+  );
+
+  const plats = catalogue
+    .filter((a) => (a.recipe?.length ?? 0) > 0)
+    .map((a) => ({
+      name: a.name,
+      priceSell: a.priceSell,
+      lignes: a.recipe?.length ?? 0,
+      recette: (a.recipe ?? [])
+        .map((l) => {
+          const unite = unites.get(l.ingredient.toLocaleLowerCase('fr')) ?? '';
+          // Le « × » sépare le nom de la quantité : sans lui, « Huile végétale
+          // 1 L 0,03 L » se lit comme deux unités collées.
+          return `${l.ingredient} × ${formatQty(l.quantity)}${unite ? ` ${unite}` : ''}`;
+        })
+        .join(' · '),
+    }));
+
+  return {
+    plats,
+    ingredientsEnStock: catalogue.filter((a) => a.category === 'Ingrédients').length,
+    boissons: catalogue.filter((a) => a.category === 'Boissons').length,
+  };
 }
 
 /**

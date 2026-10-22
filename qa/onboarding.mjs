@@ -22,6 +22,15 @@ const LIBELLES = {
   autre: 'Autre',
 };
 const EXEMPLE = { epicerie: 'Riz 25 kg', boutique: 'Chargeur', restaurant: 'Poulet braisé', autre: 'Article 1' };
+const EST_RESTO = ACTIVITE === 'restaurant';
+// Un restaurant ne reçoit pas des « produits d'exemple » mais sa carte, avec
+// les recettes de chaque plat. L'écran et les boutons changent donc de libellé.
+const TITRE_EXEMPLES = EST_RESTO
+  ? 'Votre carte de démarrage'
+  : 'Voici quelques produits pour commencer';
+const BOUTON_EXEMPLES = EST_RESTO
+  ? /Continuer avec cette carte/
+  : /Continuer avec ces produits/;
 
 fs.mkdirSync('qa/shots', { recursive: true });
 const email = process.env.QA_EMAIL ?? `qa-onb${Date.now()}@test.local`;
@@ -103,20 +112,35 @@ await page.getByRole('button', { name: new RegExp(LIBELLES[ACTIVITE].replace('/'
 await page.getByRole('button', { name: /^Continuer/ }).click();
 
 // Écran 3
-await page.getByText('Voici quelques produits pour commencer').waitFor();
+await page.getByText(TITRE_EXEMPLES).waitFor();
 await etape('exemples');
+
+if (EST_RESTO) {
+  // La recette est visible AVANT de charger : le patron comprend que le plat
+  // arrive avec ses ingrédients, et que c'est le stock qui sera déduit.
+  ok(
+    'la carte restaurant affiche la recette des plats',
+    (await page.getByText(/Poulet entier × 1 pce/).count()) > 0
+  );
+  ok(
+    'la carte restaurant annonce les ingrédients au stock',
+    (await page.getByText(/ingrédients au stock/).count()) > 0
+  );
+}
 
 // Reprise après rechargement : on revient au même écran.
 await page.reload();
-await page.getByText('Voici quelques produits pour commencer').waitFor({ timeout: 20000 });
+await page.getByText(TITRE_EXEMPLES).waitFor({ timeout: 20000 });
 ok('rechargement : l\'assistant reprend à l\'écran 3', true);
 
 let produit = EXEMPLE[ACTIVITE];
 if (VOIE === 'exemples') {
-  await page.getByRole('button', { name: /Continuer avec ces produits/ }).click();
+  await page.getByRole('button', { name: BOUTON_EXEMPLES }).click();
 } else {
   produit = 'Pagne wax QA';
-  await page.getByRole('button', { name: /Je préfère ajouter mes propres produits/ }).click();
+  await page
+    .getByRole('button', { name: EST_RESTO ? /Je préfère saisir ma carte/ : /Je préfère ajouter mes propres produits/ })
+    .click();
   await page.fill('#ob-nom', produit);
   await page.fill('#ob-prix', '5000');
   await page.getByRole('button', { name: /Ajouter ce produit/ }).click();
@@ -181,6 +205,32 @@ await page.getByRole('button', { name: 'Passer en mode complet' }).waitFor();
 await etape('parametres');
 await page.getByRole('button', { name: 'Passer en mode complet' }).click();
 await page.getByRole('button', { name: 'Revenir au mode simple' }).waitFor();
+
+// Recettes : le contrôle qui compte. La carte a écrit les recettes, pas
+// seulement les plats ; sans elles, un plat vendu ne déduit aucun ingrédient.
+if (EST_RESTO) {
+  await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
+  await page.getByRole('button', { name: /Recettes/ }).first().click();
+  await page.locator('#recipe-dish').waitFor({ timeout: 15000 });
+  // Le select est rendu PENDANT le chargement, avec seulement « Choisir un
+  // plat… ». Lire les options à cet instant ne prouve rien : on attend que les
+  // plats soient arrivés.
+  await page.waitForFunction(
+    () => document.querySelectorAll('#recipe-dish option').length > 1,
+    null,
+    { timeout: 15000 }
+  );
+  const optionsRecettes = await page.locator('#recipe-dish option').allInnerTexts();
+  ok(
+    'recettes : les plats de la carte ont leurs ingrédients',
+    optionsRecettes.some((o) => /Poulet braisé \(\d+ ingrédients\)/.test(o)),
+    optionsRecettes.join(' | ')
+  );
+  await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
+  await page.getByRole('button', { name: /Paramètres/ }).first().click();
+  await page.getByRole('button', { name: 'Revenir au mode simple' }).waitFor();
+}
+
 menu = await nav();
 ok('mode complet : Rapports et Équipe visibles', /Rapports/.test(menu) && /Équipe/.test(menu));
 await page.getByRole('button', { name: 'Revenir au mode simple' }).click();

@@ -46,6 +46,19 @@ export function categorieEstIngredient(category: string | null | undefined): boo
 }
 
 /**
+ * Une catégorie qui désigne des plats (« Plats », « Plat du jour », « Plats
+ * composés »). C'est le signal que donne le patron au moment où il crée la
+ * fiche, avant même la recette : c'est donc là qu'il faut lui rappeler qu'une
+ * recette se saisit avec le plat.
+ */
+export function categorieEstPlat(category: string | null | undefined): boolean {
+  const c = (category ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // « Plats », « Plat du jour », « Plats composés » ; pas « Plateaux », qui
+  // contient les mêmes lettres sans être un plat.
+  return /\bplats?\b/i.test(c);
+}
+
+/**
  * Un produit doit-il figurer au menu de VENTE (caisse, salle) ?
  *
  *   • un PLAT (produit avec recette) se vend toujours — c'est le menu ;

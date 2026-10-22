@@ -37,7 +37,11 @@ type SortKey = 'name' | 'stock_qty' | 'price_sell' | 'category';
 type SortDir = 'asc' | 'desc';
 
 export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, onRefresh }: InventoryTableProps) {
-  const { supabase, plan, canManageProducts, ownerId, actorName } = useSupabase();
+  const { supabase, plan, canManageProducts, ownerId, actorName, org } = useSupabase();
+  // Un restaurant ne reçoit pas des « articles d'exemple » mais une carte de
+  // démarrage : le mot juste évite de croire que le logiciel lui a donné des
+  // produits qui ne sont pas les siens.
+  const estRestaurant = org?.domain === 'restaurant';
   const [exemples, setExemples] = useState(0);
   const [nettoyage, setNettoyage] = useState(false);
   const [avertissement, setAvertissement] = useState('');
@@ -267,9 +271,19 @@ export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, o
       {exemples > 0 && canManageProducts && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
           <p className="text-xs text-amber-900 flex-1 min-w-60">
-            <strong>{exemples} article(s) d&apos;exemple</strong> sont dans votre
-            stock. Ils ne sont pas à vous : remplacez-les par vos produits, ou
-            retirez-les en un clic.
+            {estRestaurant ? (
+              <>
+                <strong>Votre carte de démarrage compte {exemples} articles</strong>{' '}
+                (plats, ingrédients et boissons). Remplacez-les par vos plats, ou
+                retirez-les en un clic.
+              </>
+            ) : (
+              <>
+                <strong>{exemples} article(s) d&apos;exemple</strong> sont dans votre
+                stock. Ils ne sont pas à vous : remplacez-les par vos produits, ou
+                retirez-les en un clic.
+              </>
+            )}
           </p>
           {avertissement && (
             <p className="text-xs text-red-700 w-full">{avertissement}</p>
@@ -278,7 +292,7 @@ export function InventoryTable({ products, onEdit, onRestock, onAdd, onImport, o
             onClick={retirerExemples}
             disabled={nettoyage}
             className="bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 gap-1.5 shrink-0"
-            aria-label="Retirer les articles d'exemple"
+            aria-label={estRestaurant ? 'Retirer la carte de démarrage' : "Retirer les articles d'exemple"}
           >
             {nettoyage ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Retrait...</>

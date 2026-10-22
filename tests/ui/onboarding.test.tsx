@@ -19,6 +19,9 @@ const etat = vi.hoisted(() => ({
   updates: [] as Record<string, unknown>[],
   inserts: [] as unknown[],
   demoDejaLa: 0,
+  carte: { charges: 17, recettes: 12, options: 5 } as
+    | { charges: number; recettes: number; options: number }
+    | { erreur: string },
   refreshOrg: vi.fn(),
 }));
 
@@ -53,6 +56,14 @@ vi.mock('@/components/providers/SupabaseProvider', () => ({
   }),
 }));
 
+// Le chargement réel du catalogue est couvert par starter-catalog-client.test.ts.
+// Ici on vérifie seulement que l'assistant l'appelle pour un restaurant, au lieu
+// d'insérer les trois articles génériques du commerce.
+vi.mock('@/lib/starterCatalog.client', () => ({
+  hasStarterCatalog: vi.fn(async () => etat.demoDejaLa),
+  loadStarterCatalog: vi.fn(async () => etat.carte),
+}));
+
 // La caisse réelle est couverte par ses propres tests : ici, seul compte ce
 // que la caisse guidée fait de ses deux signaux.
 vi.mock('@/components/pos/POSModule', () => ({
@@ -66,7 +77,8 @@ vi.mock('@/components/pos/POSModule', () => ({
 
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { GuidedCash } from '@/components/onboarding/GuidedCash';
-import { domainOf, onboardingSamples, BUSINESS_TYPES } from '@/lib/onboarding';
+import { carteDeDemarrage, domainOf, onboardingSamples, BUSINESS_TYPES } from '@/lib/onboarding';
+import { loadStarterCatalog } from '@/lib/starterCatalog.client';
 
 function renderWizard() {
   const props = { onProductsChanged: vi.fn(), onGoToCash: vi.fn(), onFinish: vi.fn() };
@@ -79,6 +91,8 @@ beforeEach(() => {
   etat.updates = [];
   etat.inserts = [];
   etat.demoDejaLa = 0;
+  etat.carte = { charges: 17, recettes: 12, options: 5 };
+  vi.mocked(loadStarterCatalog).mockClear();
   etat.refreshOrg.mockReset();
 });
 
@@ -97,6 +111,20 @@ describe('Onboarding — les données', () => {
         expect(p.priceSell).toBeGreaterThan(p.priceBuy);
       }
     }
+  });
+
+  it('la carte restaurant arrive avec ses recettes et ses ingrédients', () => {
+    const c = carteDeDemarrage();
+    expect(c.plats.length).toBeGreaterThanOrEqual(4);
+    for (const p of c.plats) {
+      expect(p.recette.length).toBeGreaterThan(0);
+      expect(p.lignes).toBeGreaterThan(0);
+      // La recette est lisible : un ingrédient, une quantité, une unité.
+      expect(p.recette).toMatch(/\d/);
+      expect(p.recette).not.toContain('—');
+    }
+    expect(c.ingredientsEnStock).toBeGreaterThan(0);
+    expect(c.boissons).toBeGreaterThan(0);
   });
 });
 
@@ -137,6 +165,36 @@ describe('Onboarding — le parcours', () => {
     w.rerender();
     fireEvent.click(screen.getByRole('button', { name: /Aller à la caisse/ }));
     expect(w.onGoToCash).toHaveBeenCalled();
+  });
+
+  it('écran 3 restaurant : une carte avec recettes, jamais les 3 articles génériques', async () => {
+    Object.assign(etat.org, { onboarding_step: 'samples', business_type: 'restaurant' });
+    const w = renderWizard();
+
+    expect(screen.getByText('Votre carte de démarrage')).toBeInTheDocument();
+    // La recette du plat est écrite à l'écran : c'est elle qui dit au patron
+    // qu'un plat se vend avec ses ingrédients.
+    expect(screen.getByText(/Poulet entier × 1 pce/)).toBeInTheDocument();
+    expect(screen.queryByText('Voici quelques produits pour commencer')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Continuer avec cette carte/ }));
+    await waitFor(() => expect(etat.updates).toContainEqual({ onboarding_step: 'first_sale' }));
+
+    expect(loadStarterCatalog).toHaveBeenCalledWith(supabase, 'org-1', 'restaurant');
+    // Aucun insert direct : la carte passe par la fonction qui écrit aussi les
+    // recettes, les ingrédients et les options.
+    expect(etat.inserts).toHaveLength(0);
+    expect(w.onProductsChanged).toHaveBeenCalled();
+  });
+
+  it('écran 3 restaurant : une erreur de chargement ne fait pas avancer', async () => {
+    Object.assign(etat.org, { onboarding_step: 'samples', business_type: 'restaurant' });
+    etat.carte = { erreur: 'Connexion interrompue' };
+    renderWizard();
+
+    fireEvent.click(screen.getByRole('button', { name: /Continuer avec cette carte/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Connexion interrompue');
+    expect(etat.updates).toHaveLength(0);
   });
 
   it('écran 3 : un second passage ne crée pas les exemples en double', async () => {

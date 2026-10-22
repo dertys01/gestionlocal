@@ -153,6 +153,31 @@ describe('ProductForm', () => {
     expect(screen.getByText(/Modifier le produit/i)).toBeInTheDocument();
   });
 
+  it('rappelle qu\'une recette se saisit avec le plat, au restaurant', () => {
+    h.session.org = { domain: 'restaurant' };
+    render(<ProductForm onClose={noop} onSaved={noop} />);
+
+    remplir(/^Catégorie/, 'Plats');
+    expect(screen.getByText(/Une recette se saisit avec le plat/i)).toBeInTheDocument();
+  });
+
+  it('signale un plat existant sans recette, et ne le fait pas pour un commerce', async () => {
+    h.session.org = { domain: 'restaurant' };
+    const { unmount } = render(
+      <ProductForm product={produit({ category: 'Plats' })} onClose={noop} onSaved={noop} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/Ce plat n'a pas de recette/i)).toBeInTheDocument(),
+    );
+    unmount();
+
+    // Un commerce peut avoir une catégorie « Plats » (des assiettes) : le
+    // rappel sur les recettes n'a rien à y faire.
+    h.session.org = { domain: 'retail' };
+    render(<ProductForm product={produit({ category: 'Plats' })} onClose={noop} onSaved={noop} />);
+    expect(screen.queryByText(/pas de recette/i)).not.toBeInTheDocument();
+  });
+
   it('déduplique les catégories à la casse et aux espaces près', async () => {
     h.categories.rows = [{ category: 'Boissons' }, { category: '  boissons  ' }, { category: 'Céréales' }];
     render(<ProductForm onClose={noop} onSaved={noop} />);

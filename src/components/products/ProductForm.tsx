@@ -9,6 +9,7 @@ import { SupplierSelect } from '@/components/products/SupplierSelect';
 import { logActivity } from '@/lib/utils/activity';
 import { canAddProduct, PLAN_LIMITS, PLAN_LABELS } from '@/lib/utils/plans';
 import { fieldExamples } from '@/lib/starterCatalog';
+import { categorieEstPlat } from '@/lib/utils/dishes';
 import { lireMontant } from '@/lib/utils/nombres';
 import type { Product } from '@/types';
 
@@ -34,6 +35,10 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
+  // Un plat déjà enregistré peut ne pas avoir de recette. On ne le devine pas
+  // depuis la fiche : le produit ne porte pas cette information, c'est la table
+  // recipe_ingredients qui la porte.
+  const [sansRecette, setSansRecette] = useState(false);
 
   useEffect(() => {
     // Le builder est un thenable sans .catch() : on enveloppe en async/await.
@@ -86,6 +91,29 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
 
   const set = (key: string, value: string | null) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // Un plat sans recette se vend, mais ne déduit rien du stock et n'a pas de
+  // marge. Ce n'est pas une erreur à bloquer : c'est une information à donner
+  // au moment exact où le patron crée la fiche.
+  const estRestaurant = org?.domain === 'restaurant';
+  const categoriePlat = estRestaurant && categorieEstPlat(form.category);
+
+  useEffect(() => {
+    if (!product || !categoriePlat) { setSansRecette(false); return; }
+    let annule = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('recipe_ingredients')
+        .select('dish_id')
+        .eq('dish_id', product.id);
+      // Une erreur de lecture ne doit pas afficher un avertissement faux : on
+      // préfère le silence à « ce plat n'a pas de recette » quand on n'en sait
+      // rien.
+      if (annule || error) return;
+      setSansRecette(((data ?? []) as unknown[]).length === 0);
+    })();
+    return () => { annule = true; };
+  }, [product, categoriePlat, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,6 +293,35 @@ export function ProductForm({ product, onClose, onSaved, currentProductCount = 0
               </div>
             )}
           </div>
+
+          {/* Recette du plat : le rappel qui manquait. Un plat sans recette se
+              vend quand même, mais il ne consomme rien et n'affiche aucune
+              marge : c'est exactement ce qu'un maquis doit comprendre AVANT de
+              créer sa carte. */}
+          {categoriePlat && (!product || sansRecette) && (
+            <div
+              className={`rounded-lg border px-3 py-2 text-xs ${
+                product
+                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                  : 'border-indigo-200 bg-indigo-50 text-indigo-900'
+              }`}
+            >
+              {product ? (
+                <>
+                  <strong>Ce plat n&apos;a pas de recette.</strong> Sa vente ne déduit
+                  aucun ingrédient du stock et sa marge n&apos;est pas calculée.
+                  Ajoutez sa recette dans l&apos;onglet Recettes.
+                </>
+              ) : (
+                <>
+                  <strong>Une recette se saisit avec le plat.</strong> Après
+                  l&apos;enregistrement, ajoutez sa recette dans l&apos;onglet
+                  Recettes : c&apos;est elle qui déduit les ingrédients du stock et
+                  calcule la marge.
+                </>
+              )}
+            </div>
+          )}
 
           {/* Fournisseur */}
           <div className="space-y-1">

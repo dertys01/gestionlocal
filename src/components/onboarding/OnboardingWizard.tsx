@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, CheckCircle, Handshake, LayoutDashboard, Loader2, Package, PartyPopper, Plus, ShoppingCart } from 'lucide-react';
+import { ArrowRight, CheckCircle, ChefHat, Handshake, LayoutDashboard, Loader2, Package, PartyPopper, Plus, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSupabase } from '@/components/providers/SupabaseProvider';
 import { formatCFA } from '@/lib/utils/currency';
-import { hasStarterCatalog } from '@/lib/starterCatalog.client';
+import { hasStarterCatalog, loadStarterCatalog } from '@/lib/starterCatalog.client';
 import {
   BUSINESS_DESCRIPTIONS,
   BUSINESS_LABELS,
   BUSINESS_TYPES,
+  carteDeDemarrage,
   domainOf,
   normalizeBusinessType,
   normalizeOnboardingStep,
@@ -60,6 +61,11 @@ export function OnboardingWizard({ onProductsChanged, onGoToCash, onFinish }: On
   const [quantite, setQuantite] = useState('');
 
   const type: BusinessType = normalizeBusinessType(org?.business_type) ?? choix ?? 'autre';
+  // Un restaurant n'accueille pas avec des articles génériques : il accueille
+  // avec sa carte, recettes comprises. L'écran montre des PLATS (l'unité de
+  // travail d'un maquis), pas les 17 articles du stock.
+  const estRestaurant = type === 'restaurant';
+  const carte = carteDeDemarrage();
 
   /** Écrit l'étape (et d'autres colonnes au besoin), puis relit la boutique. */
   const avancer = async (suivante: OnboardingStep, extra: Record<string, unknown> = {}) => {
@@ -94,16 +100,22 @@ export function OnboardingWizard({ onProductsChanged, onGoToCash, onFinish }: On
     setLoading(true);
     setError('');
     try {
-      // Un second passage (retour arrière, double tap, reprise après coupure) ne
-      // doit pas créer les exemples en double.
-      if ((await hasStarterCatalog(supabase, ownerId)) === 0) {
+      if (estRestaurant) {
+        // La carte de démarrage écrit les plats, leurs recettes, les ingrédients
+        // au stock et les options. La fonction est idempotente : un second
+        // passage ne réécrit rien.
+        const r = await loadStarterCatalog(supabase, ownerId, 'restaurant');
+        if ('erreur' in r) { setError(r.erreur); return; }
+      } else if ((await hasStarterCatalog(supabase, ownerId)) === 0) {
+        // Un second passage (retour arrière, double tap, reprise après coupure)
+        // ne doit pas créer les exemples en double.
         const { error: err } = await supabase.from('products').insert(sampleRows(type, ownerId));
         if (err) { setError(err.message); return; }
       }
       onProductsChanged();
       await avancer('first_sale');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ajout des exemples impossible.');
+      setError(e instanceof Error ? e.message : 'Ajout du catalogue impossible.');
     } finally {
       setLoading(false);
     }
@@ -237,35 +249,61 @@ export function OnboardingWizard({ onProductsChanged, onGoToCash, onFinish }: On
             </div>
           )}
 
-          {/* ── Écran 3 — Produits d'exemple ── */}
+          {/* ── Écran 3 — Produits d'exemple (commerce) ou carte (restaurant) ── */}
           {step === 'samples' && !mesProduits && (
             <div className="space-y-5">
               <div className="text-center">
-                <h2 className="text-xl font-bold text-slate-800">Voici quelques produits pour commencer</h2>
-                <p className="text-sm text-slate-600 mt-2">Vous pourrez les modifier ou les supprimer plus tard.</p>
+                <h2 className="text-xl font-bold text-slate-800">
+                  {estRestaurant ? 'Votre carte de démarrage' : 'Voici quelques produits pour commencer'}
+                </h2>
+                <p className="text-sm text-slate-600 mt-2">
+                  {estRestaurant
+                    ? 'Ces plats arrivent avec leurs recettes. Leurs ingrédients entrent au stock : à chaque vente, ils sont déduits et la marge du plat se calcule.'
+                    : 'Vous pourrez les modifier ou les supprimer plus tard.'}
+                </p>
               </div>
               <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                {onboardingSamples(type).map((s) => (
-                  <li key={s.name} className="flex items-center gap-3 px-4 py-3">
-                    <Package className="h-4 w-4 text-indigo-500 shrink-0" />
-                    <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{s.name}</span>
-                    <span className="text-sm text-slate-600 tabular-nums">{formatCFA(s.priceSell)}</span>
-                  </li>
-                ))}
+                {estRestaurant
+                  ? carte.plats.map((p) => (
+                      <li key={p.name} className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <ChefHat className="h-4 w-4 text-indigo-500 shrink-0" />
+                          <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{p.name}</span>
+                          <span className="text-sm text-slate-600 tabular-nums">{formatCFA(p.priceSell)}</span>
+                        </div>
+                        {/* La recette est écrite en clair : c'est elle qui montre
+                            au patron qu'un plat se vend AVEC ses ingrédients. */}
+                        <p className="mt-1 pl-7 text-xs text-slate-500">{p.recette}</p>
+                      </li>
+                    ))
+                  : onboardingSamples(type).map((s) => (
+                      <li key={s.name} className="flex items-center gap-3 px-4 py-3">
+                        <Package className="h-4 w-4 text-indigo-500 shrink-0" />
+                        <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{s.name}</span>
+                        <span className="text-sm text-slate-600 tabular-nums">{formatCFA(s.priceSell)}</span>
+                      </li>
+                    ))}
               </ul>
+              {estRestaurant && (
+                <p className="text-xs text-slate-500 text-center">
+                  {carte.ingredientsEnStock} ingrédients au stock et {carte.boissons} boissons à la carte. Vous pourrez tout modifier.
+                </p>
+              )}
               <Button
                 onClick={garderLesExemples}
                 disabled={loading}
                 className="w-full h-12 text-base bg-indigo-600 hover:bg-indigo-700 gap-2"
               >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Continuer avec ces produits <ArrowRight className="h-4 w-4" /></>}
+                {loading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <>{estRestaurant ? 'Continuer avec cette carte' : 'Continuer avec ces produits'} <ArrowRight className="h-4 w-4" /></>}
               </Button>
               <button
                 type="button"
                 onClick={() => { setError(''); setMesProduits(true); }}
                 className="w-full text-sm text-slate-600 hover:text-slate-800 underline"
               >
-                Je préfère ajouter mes propres produits
+                {estRestaurant ? 'Je préfère saisir ma carte' : 'Je préfère ajouter mes propres produits'}
               </button>
             </div>
           )}
@@ -276,9 +314,13 @@ export function OnboardingWizard({ onProductsChanged, onGoToCash, onFinish }: On
           {step === 'samples' && mesProduits && (
             <div className="space-y-5">
               <div className="text-center">
-                <h2 className="text-xl font-bold text-slate-800">Ajoutez vos produits</h2>
+                <h2 className="text-xl font-bold text-slate-800">
+                  {estRestaurant ? 'Ajoutez votre premier plat' : 'Ajoutez vos produits'}
+                </h2>
                 <p className="text-sm text-slate-600 mt-2">
-                  Un seul suffit pour faire votre première vente.
+                  {estRestaurant
+                    ? 'Un seul suffit pour faire votre première vente. Sa recette s\'ajoute juste après, dans l\'onglet Recettes.'
+                    : 'Un seul suffit pour faire votre première vente.'}
                 </p>
               </div>
 
@@ -327,7 +369,7 @@ export function OnboardingWizard({ onProductsChanged, onGoToCash, onFinish }: On
                 onClick={() => { setError(''); setMesProduits(false); }}
                 className="w-full text-sm text-slate-600 hover:text-slate-800 underline"
               >
-                Revenir aux produits d&apos;exemple
+                {estRestaurant ? 'Revenir à la carte de démarrage' : 'Revenir aux produits d\'exemple'}
               </button>
             </div>
           )}

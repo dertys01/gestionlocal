@@ -262,7 +262,7 @@ export function RecipesModule() {
         <EmptyState
           icon={ChefHat}
           title="Aucun plat à composer"
-          hint="Créez d'abord vos plats et vos ingrédients depuis l'onglet Stock : un ingrédient est un produit vendu ou non, mais qui a un stock."
+          hint="Un plat se compose avec ses ingrédients et leurs quantités. Ajoutez d'abord le plat et ses ingrédients depuis l'onglet Stock, puis sa recette ici : c'est elle qui déduit le stock à la vente et calcule la marge du plat."
         />
       ) : (
         <Card className="border-slate-200">
