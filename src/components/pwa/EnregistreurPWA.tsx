@@ -2,6 +2,17 @@
 
 import { useEffect } from 'react';
 
+// Import à effet de bord : `invite.ts` branche l'écoute de
+// `beforeinstallprompt` au chargement du module. Il doit vivre ici, dans la
+// coquille montée par le layout, donc sur TOUTES les routes.
+//
+// Sans lui, seul le tableau de bord chargeait le module. Un utilisateur qui
+// arrivait directement sur /connexion ou /register (adresse en favori, lien
+// partagé) laissait passer l'événement, que le navigateur n'émet qu'une fois
+// par chargement de page : après connexion, la bannière « Installer » n'avait
+// plus d'invitation à afficher. Elle avait disparu.
+import '@/lib/pwa/invite';
+
 /**
  * Enregistre le service worker (P2/P7).
  *

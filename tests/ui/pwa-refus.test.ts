@@ -22,6 +22,7 @@ function storageQuiMarche() {
       removeItem: (k: string) => { store.delete(k); },
     },
   });
+  return store;
 }
 const sansStorage = () =>
   Object.defineProperty(window, 'localStorage', { configurable: true, value: undefined });
@@ -59,5 +60,20 @@ describe('pwa/refus', () => {
     expect(() => marquerRefus()).not.toThrow();
     expect(lireRefus()).toBe(false);
     expect(() => reinitialiserRefus()).not.toThrow();
+  });
+
+  it('oublie un refus vieux de plus d’un mois', () => {
+    // Un refus éternel rendait l'option « Installer » introuvable pour
+    // toujours, sans aucun moyen de la retrouver depuis l'application.
+    const store = storageQuiMarche();
+    store.set('gl:installation-refusee', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    expect(lireRefus()).toBe(false);
+  });
+
+  it('rend une chance à un refus enregistré sans date (ancien format)', () => {
+    const store = storageQuiMarche();
+    store.set('gl:installation-refusee', '1');
+    expect(lireRefus()).toBe(false);
+    expect(store.has('gl:installation-refusee')).toBe(false);
   });
 });
